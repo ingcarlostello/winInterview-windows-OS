@@ -1,0 +1,30 @@
+ok, entonces recuerdame, cuales fueron las desiciones tomadas para hacer este proyecto?
+
+Claro, aquí tienes el resumen ejecutivo de todas las decisiones técnicas y arquitectónicas que hemos definido para tu Copiloto de Entrevistas en Tiempo Real:
+1. Modelo de IA y APIs (Ecosistema Qwen / Alibaba Cloud)
+Cerebro (LLM): Qwen2.5-Coder-32B-Instruct (vía DashScope API). Elegido por ser líder en preguntas técnicas/programación. Se usará en modo Streaming para mínima latencia.
+Transcripción (STT): SenseVoice o Paraformer (vía DashScope API). Modelos ASR dedicados para transcripción en tiempo real, superiores a modelos multimodales genéricos para este caso de uso.
+System Prompt: Diseñado específicamente para actuar como "apuntador de teatro". No genera ensayos, sino 3 viñetas cortas + mini-ejemplo de código para lectura en 2 segundos.
+2. Frontend (Tu zona de experticia)
+Framework: React 18 + TypeScript. Decidido por tu perfil experto; evita curva de aprendizaje y garantiza compatibilidad total con el ecosistema npm.
+Bundler: Vite. Para HMR instantáneo y builds rápidos.
+State Management: Zustand. Ligero, ideal para manejar el estado del streaming sin el boilerplate de Redux.
+Comunicación: WebSockets. Para recibir los chunks de texto del LLM en tiempo real sin overhead HTTP.
+3. App de Escritorio (Wrapper)
+Tecnología: Tauri. Elegido sobre Electron por ser ligero (~10MB vs 150MB), consumir poca RAM (~40MB) y tener soporte nativo superior para ventanas overlay transparentes.
+Configuración de Ventana: decorations: false, transparent: true, alwaysOnTop: true. Para flotar sobre Zoom/Meet sin interferir.
+Backend Nativo: Rust (mínimo indispensable). Solo para comandos nativos como toggle_always_on_top y set_window_opacity. No necesitas saber Rust a fondo.
+4. Backend de Orquestación
+Tecnología: FastAPI (Python). Elegido por su soporte nativo de async/WebSockets y la madurez del SDK de DashScope en Python.
+Rol: Actúa como puente entre el frontend React y la API de DashScope. Maneja la lógica de VAD (Voice Activity Detection), contexto de conversación y formateo de prompts.
+5. Arquitectura General
+1
+6. Decisiones Descartadas (y por qué)
+❌ Preact: Marginalmente más ligero que React, pero innecesario dado tu expertise en React.
+❌ Electron: Demasiado pesado (150MB+, alto consumo RAM) para una app que corre junto a videollamadas.
+❌ React Native Desktop: Soporte limitado para overlay transparente y captura de audio del sistema; setup complejo.
+❌ NiceGUI / CustomTkinter: Buenos para prototipos rápidos en Python puro, pero no aprovechan tu experiencia senior en React.
+⚠️ Pendientes por Definir
+Captura de Audio del Sistema: ¿Se hará desde el frontend (Web Audio API en Tauri) o desde el backend Python (PyAudio/webrtcvad)? Recomendación: Backend Python para mejor manejo de VAD.
+Gestión de API Keys: ¿Se almacenarán en variables de entorno del sistema o en un archivo de configuración cifrado de Tauri?
+Atajos de Teclado Globales: ¿Qué combinación usarás para pausar/reanudar la escucha o cambiar entre modo técnico/RRHH?
