@@ -10,6 +10,7 @@
     "beforeBuildCommand": "npm run build"
   },
   "app": {
+    "macOSPrivateApi": true,
     "windows": [
       {
         "title": "Interview Copilot",
@@ -40,11 +41,6 @@
     ],
     "android": {
       "debugApplicationIdSuffix": ".debug"
-    }
-  },
-  "plugins": {
-    "global-shortcut": {
-      "shortcuts": []
     }
   }
 }

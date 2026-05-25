@@ -1,18 +1,22 @@
 @import "tailwindcss";
 
 @layer base {
+  html,
   body {
-    @apply m-0 bg-transparent text-white font-sans;
+    @apply m-0 p-0 bg-transparent text-white font-sans overflow-hidden;
     font-synthesis: none;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    overflow: hidden;
     user-select: none;
   }
 
   #root {
-    @apply w-full h-screen flex flex-col;
-    border-radius: 12px;
+    @apply w-full h-screen;
   }
+}
+
+@utility scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(255 255 255 / 0.1) transparent;
 }

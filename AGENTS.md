@@ -5,8 +5,9 @@
 - **Tauri v2 desktop app** (React + TypeScript frontend, Rust shell, Python orchestration backend)
 - **Frontend**: `src/` — React 19, Tailwind CSS v4, Zustand, Vite
 - **Desktop shell**: `src-tauri/` — Rust (minimal; only native window commands + global shortcut plugin)
-- **Orchestration backend**: `backend/` — FastAPI + WebSockets, managed via Poetry. Calls DashScope API (Qwen2.5 for LLM, SenseVoice/Paraformer for STT)
+- **Orchestration backend**: `backend/` — FastAPI + WebSockets, managed via Poetry. Calls DashScope API (Qwen2.5-Coder for LLM, Paraformer for STT)
 - The app runs as a transparent, always-on-top overlay (`420×320`, frameless) designed to float over Zoom/Meet
+- **Flow**: Microphone → PyAudio (16kHz PCM) → webrtcvad (VAD) → DashScope Paraformer (real-time ASR) → Sentence detected → LLM streaming (Qwen2.5-Coder) → Response chunks via WebSocket → Frontend renders bullets + code blocks
 
 ## Commands
 
@@ -40,6 +41,94 @@ Tauri bundles the Vite output from `dist/`. Run `npm run build` before `npm run 
 - **Python >= 3.14** is required for the backend
 - Vite dev server uses **strict port 5173**; Tauri expects it there
 
+## Frontend
+
+### State Management (Zustand)
+
+Single store at `src/stores/interview.ts`:
+
+| Field | Type | Purpose |
+|---|---|---|
+| `status` | `Status` | `idle` \| `connected` \| `listening` \| `thinking` \| `responding` \| `paused` \| `error` |
+| `transcription` | `string` | Current interviewer question text |
+| `responseChunks` | `string[]` | Accumulated LLM response chunks (streamed) |
+| `error` | `string \| null` | Last error message |
+
+Actions: `setStatus`, `setTranscription`, `addResponseChunk`, `clearResponse`, `setError`, `reset`
+
+### WebSocket Hook
+
+`src/hooks/useWebSocket.ts`:
+
+- Connects to `ws://localhost:8000/ws`
+- Auto-reconnect with 3-second delay on close
+- Message types from backend: `status`, `transcription`, `chunk`, `error`
+- Commands sent to backend: `pause`, `resume`, `clear` (plain text strings)
+- Uses `mountedRef` to prevent state updates on unmounted components
+
+### Components
+
+| Component | Purpose |
+|---|---|
+| `App.tsx` | Root — wires `useWebSocket().send` to `Overlay` callbacks |
+| `Overlay.tsx` | Main layout — header bar (StatusBar + Controls), Transcription, Response. Dark glass morphism |
+| `StatusBar.tsx` | Status indicator dot with pulse animation per status. Labels in Spanish. Error text truncated to 200px |
+| `Transcription.tsx` | Shows "Entrevistador" label + transcribed text. Shows "..." while thinking |
+| `Response.tsx` | Custom parser: splits LLM output into bullets (`- ` or `* `) and code blocks (```` ``` ````). Code blocks in monospace green. Bullets with purple dots. Blinking cursor during streaming |
+| `Controls.tsx` | Pause/Resume toggle (green/yellow), Clear button (subtle). Labels in Spanish |
+
+### CSS
+
+- Custom utility `scrollbar-thin` for thin scrollbars in `src/index.css`
+- All user-facing text is in Spanish
+
+## Backend
+
+### Dependencies
+
+| Package | Purpose |
+|---|---|
+| `dashscope` | Alibaba Cloud AI SDK (LLM + ASR) |
+| `fastapi` | Web framework |
+| `pyaudio` | Audio capture from microphone |
+| `webrtcvad` | Voice Activity Detection |
+| `uvicorn[standard]` | ASGI server |
+| `websockets` | WebSocket exception handling |
+| `python-dotenv` | Environment variable loading |
+
+### Architecture
+
+**Main app** (`backend/src/backend/main.py`):
+
+- `GET /health` — Returns status and active connection count
+- `WebSocket /ws` — Main endpoint with per-connection lifecycle:
+  1. Creates session ID, accepts WebSocket
+  2. Initializes: `ConversationContext` (max 10 messages), `LLMClient`, `Transcriber`, `AudioCapture`
+  3. Sets up callbacks for partial transcription, sentence-end, and ASR errors
+  4. Starts audio capture and transcriber
+  5. Handles control messages: `pause`, `resume`, `clear`
+  6. Cleanup on disconnect
+
+**Key patterns**:
+- `is_processing` flag prevents overlapping LLM calls
+- `asyncio.run_coroutine_threadsafe` bridges sync audio callbacks to async event loop
+- Partial transcription accumulation: uses final sentence-end text (or accumulated partials) as the question
+
+### Modules
+
+| Module | Purpose |
+|---|---|
+| `audio/capture.py` | PyAudio at 16kHz, 16-bit, mono + webrtcvad (aggressiveness 2). 20ms frames. Triggers speech start/end after 30 silence frames (~600ms) |
+| `llm/client.py` | DashScope async streaming with `qwen2.5-coder-32b-instruct`. `AioGeneration.call` with `incremental_output=True` |
+| `llm/prompt.py` | System prompt: "theater prompter" style. Max 3 bullets (each <2s read), max 3-line code examples, Spanish-only, no greetings |
+| `stt/transcriber.py` | DashScope Paraformer (`paraformer-realtime-v2`) for real-time ASR. PCM 16kHz. Custom callback for partial/sentence events |
+| `context.py` | Deque-based conversation context (max 10 messages). Stores role/content pairs |
+| `ws_manager.py` | ConnectionManager with typed sends: `send_status`, `send_transcription`, `send_response_chunk`, `send_error` |
+
+### WebSocket Message Format
+
+All messages follow: `{"type": "...", "data": {...}}`
+
 ## Environment
 
 - Backend requires `DASHSCOPE_API_KEY` in `backend/.env` — see `backend/.env.example`
@@ -52,5 +141,12 @@ Tauri bundles the Vite output from `dist/`. Run `npm run build` before `npm run 
 ## Rust/Tauri notes
 
 - Rust changes in `src-tauri/` require a rebuild of the Tauri binary — the Vite HMR does not cover them
-- The `src-tauri/capabilities/default.json` currently only grants `core:default` permissions; extend this when adding new Tauri plugin permissions
+- The `src-tauri/capabilities/default.json` grants `core:default` and `global-shortcut:default` permissions
 - `main.rs` sets `windows_subsystem = "windows"` in release mode — console output is suppressed on Windows
+- **`macos-private-api`** feature is enabled in `Cargo.toml` — required for transparent windows on macOS
+- Window config in `tauri.conf.json`: 420x320, frameless, transparent, always-on-top, centered, CSP disabled
+
+## Other files
+
+- `desiciones.txt` — Design decisions log (Spanish), includes discarded alternatives (Preact, Electron, React Native Desktop, NiceGUI, CustomTkinter)
+- `errores/` — Error screenshots directory (`error1.png`, `error2.png`)
