@@ -13,6 +13,7 @@ export function useWebSocket() {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
+  const intentionalCloseRef = useRef(false);
 
   const setStatus = useInterviewStore((s) => s.setStatus);
   const setTranscription = useInterviewStore((s) => s.setTranscription);
@@ -20,20 +21,26 @@ export function useWebSocket() {
   const clearResponse = useInterviewStore((s) => s.clearResponse);
   const clearAll = useInterviewStore((s) => s.clearAll);
   const setError = useInterviewStore((s) => s.setError);
+  const reset = useInterviewStore((s) => s.reset);
 
   const disconnect = useCallback(() => {
-    mountedRef.current = false;
+    intentionalCloseRef.current = true;
     if (reconnectTimerRef.current) {
       clearTimeout(reconnectTimerRef.current);
       reconnectTimerRef.current = null;
     }
-    wsRef.current?.close();
+    if (wsRef.current) {
+      wsRef.current.close(1000, "user_disconnect");
+    }
     wsRef.current = null;
-  }, []);
+    reset();
+  }, [reset]);
 
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
     if (wsRef.current?.readyState === WebSocket.CONNECTING) return;
+
+    intentionalCloseRef.current = false;
 
     if (reconnectTimerRef.current) {
       clearTimeout(reconnectTimerRef.current);
@@ -94,7 +101,7 @@ export function useWebSocket() {
 
     ws.onclose = () => {
       setStatus("idle");
-      if (mountedRef.current) {
+      if (mountedRef.current && !intentionalCloseRef.current) {
         reconnectTimerRef.current = setTimeout(connect, 3000);
       }
     };

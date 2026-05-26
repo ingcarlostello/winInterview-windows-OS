@@ -5,14 +5,12 @@ interface ControlsProps {
   onResume: () => void;
   onClear: () => void;
   onConnect: () => void;
+  onDisconnect: () => void;
 }
 
-export default function Controls({ onPause, onResume, onClear, onConnect }: ControlsProps) {
+export default function Controls({ onPause, onResume, onClear, onConnect, onDisconnect }: ControlsProps) {
   const status = useInterviewStore((s) => s.status);
   const isPaused = status === "paused";
-
-  console.log("status ===>", status);
-
 
   return (
     <div className="flex items-center gap-1.5 ml-auto pr-3 h-16">
@@ -35,17 +33,27 @@ export default function Controls({ onPause, onResume, onClear, onConnect }: Cont
           ⏳ Conectando...
         </button>
       ) : (
-        <button
-          type="button"
-          onClick={() => (isPaused ? onResume() : onPause())}
-          className={`px-2 py-0.5 text-[14px] font-medium rounded transition-colors cursor-pointer ${isPaused
-            ? "bg-green-500/20 text-green-400 hover:bg-green-500/30"
-            : "bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30"
-            }`}
-          title={isPaused ? "Reanudar escucha" : "Pausar escucha"}
-        >
-          {isPaused ? "▶ Reanudar" : "⏸ Pausar"}
-        </button>
+        <>
+          <button
+            type="button"
+            onClick={onDisconnect}
+            className="px-2 py-0.5 text-[14px] font-medium rounded transition-colors cursor-pointer bg-red-500/20 text-red-400 hover:bg-red-500/30"
+            title="Terminar sesión"
+          >
+            🔴 Terminar
+          </button>
+          <button
+            type="button"
+            onClick={() => (isPaused ? onResume() : onPause())}
+            className={`px-2 py-0.5 text-[14px] font-medium rounded transition-colors cursor-pointer ${isPaused
+              ? "bg-green-500/20 text-green-400 hover:bg-green-500/30"
+              : "bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30"
+              }`}
+            title={isPaused ? "Reanudar escucha" : "Pausar escucha"}
+          >
+            {isPaused ? "▶ Reanudar" : "⏸ Pausar"}
+          </button>
+        </>
       )}
       <button
         type="button"

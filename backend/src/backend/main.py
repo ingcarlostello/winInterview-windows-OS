@@ -190,13 +190,44 @@ async def websocket_endpoint(websocket: WebSocket):
     await ws_manager.send_status(session_id, "listening")
     await audio_capture.start()
 
+    is_paused = False
+
+    async def keepalive_loop():
+        silent_frame = b'\x00' * 1600
+        while True:
+            if is_paused and agent_conn:
+                try:
+                    def _send_ka():
+                        if not agent_conn:
+                            return
+                        try:
+                            if hasattr(agent_conn, "keep_alive"):
+                                agent_conn.keep_alive()
+                            elif hasattr(agent_conn, "send_keep_alive"):
+                                agent_conn.send_keep_alive()
+                        except Exception:
+                            pass
+                        try:
+                            agent_conn.send_media(silent_frame)
+                        except Exception:
+                            pass
+
+                    await loop.run_in_executor(None, _send_ka)
+                except Exception as e:
+                    logger.debug("Keepalive error: %s", e)
+            await asyncio.sleep(3)
+
+    ka_task = asyncio.create_task(keepalive_loop())
+
     try:
         while True:
             msg = await websocket.receive_text()
             if msg == "pause":
+                is_paused = True
                 await audio_capture.stop()
                 await ws_manager.send_status(session_id, "paused")
             elif msg == "resume":
+                is_paused = False
                 await audio_capture.start()
                 await ws_manager.send_status(session_id, "listening")
             elif msg == "clear":
@@ -205,6 +236,8 @@ async def websocket_endpoint(websocket: WebSocket):
     except (WebSocketDisconnect, ConnectionClosed, RuntimeError):
         logger.info("Client disconnected: %s", session_id)
     finally:
+        if ka_task:
+            ka_task.cancel()
         await audio_capture.stop()
         audio_capture.close()
         ctx = agent_ctx

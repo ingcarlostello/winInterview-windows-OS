@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import threading
 from collections.abc import Callable
 
 import pyaudio
@@ -19,6 +20,7 @@ class AudioCapture:
         self._stream: pyaudio.Stream | None = None
         self._running = False
         self._loop_task: asyncio.Task[None] | None = None
+        self._stream_lock = threading.Lock()
 
         self._on_audio_frame: Callable[[bytes], None] | None = None
 
@@ -58,8 +60,10 @@ class AudioCapture:
             self._loop_task = None
         if self._stream:
             try:
-                self._stream.stop_stream()
-                self._stream.close()
+                with self._stream_lock:
+                    if self._stream.is_active():
+                        self._stream.stop_stream()
+                    self._stream.close()
             except OSError:
                 pass
             self._stream = None
@@ -69,10 +73,16 @@ class AudioCapture:
         loop = asyncio.get_running_loop()
 
         while self._running and self._stream:
+            def _read_chunk():
+                with self._stream_lock:
+                    if self._stream and self._stream.is_active():
+                        return self._stream.read(self.FRAME_SIZE, exception_on_overflow=False)
+                    return None
+
             try:
-                frame = await loop.run_in_executor(
-                    None, self._stream.read, self.FRAME_SIZE, False
-                )
+                frame = await loop.run_in_executor(None, _read_chunk)
+                if frame is None:
+                    break
             except OSError:
                 break
 
@@ -87,8 +97,10 @@ class AudioCapture:
     def close(self) -> None:
         if self._stream:
             try:
-                self._stream.stop_stream()
-                self._stream.close()
+                with self._stream_lock:
+                    if self._stream.is_active():
+                        self._stream.stop_stream()
+                    self._stream.close()
             except OSError:
                 pass
         try:
