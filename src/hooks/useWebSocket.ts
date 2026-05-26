@@ -18,6 +18,7 @@ export function useWebSocket() {
   const setTranscription = useInterviewStore((s) => s.setTranscription);
   const addResponseChunk = useInterviewStore((s) => s.addResponseChunk);
   const clearResponse = useInterviewStore((s) => s.clearResponse);
+  const clearAll = useInterviewStore((s) => s.clearAll);
   const setError = useInterviewStore((s) => s.setError);
 
   const disconnect = useCallback(() => {
@@ -30,66 +31,81 @@ export function useWebSocket() {
     wsRef.current = null;
   }, []);
 
-  useEffect(() => {
-    mountedRef.current = true;
+  const connect = useCallback(() => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) return;
+    if (wsRef.current?.readyState === WebSocket.CONNECTING) return;
 
-    function connect() {
-      if (wsRef.current?.readyState === WebSocket.OPEN) return;
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
 
-      const ws = new WebSocket(WS_URL);
-      wsRef.current = ws;
+    setStatus("connected");
 
-      ws.onopen = () => {
-        setStatus("connected");
-      };
+    const ws = new WebSocket(WS_URL);
+    wsRef.current = ws;
 
-      ws.onmessage = (event) => {
-        try {
-          const msg: WSMessage = JSON.parse(event.data);
+    ws.onopen = () => {
+      setStatus("connected");
+    };
 
-          switch (msg.type) {
-            case "status": {
-              const statusMap: Record<string, Status> = {
-                connected: "connected",
-                listening: "listening",
-                thinking: "thinking",
-                responding: "responding",
-                paused: "paused",
-              };
-              const status = statusMap[msg.data.status] || "idle";
-              setStatus(status);
+    ws.onmessage = (event) => {
+      try {
+        const msg: WSMessage = JSON.parse(event.data);
 
-              if (msg.data.status === "listening") {
-                clearResponse();
-              }
+        switch (msg.type) {
+          case "status": {
+            const rawStatus = msg.data.status;
+
+            if (rawStatus === "cleared") {
+              clearAll();
               break;
             }
-            case "transcription":
-              setTranscription(msg.data.text);
-              break;
-            case "chunk":
-              addResponseChunk(msg.data.content);
-              break;
-            case "error":
-              setError(msg.data.message);
-              break;
+
+            const statusMap: Record<string, Status> = {
+              connected: "connected",
+              listening: "listening",
+              thinking: "thinking",
+              responding: "responding",
+              paused: "paused",
+            };
+            const status = statusMap[rawStatus] || "idle";
+            setStatus(status);
+
+            if (rawStatus === "thinking") {
+              clearResponse();
+            }
+            break;
           }
-        } catch {
-          // ignore parse errors
+          case "transcription":
+            setTranscription(msg.data.text);
+            break;
+          case "chunk":
+            addResponseChunk(msg.data.content);
+            break;
+          case "error":
+            setError(msg.data.message);
+            break;
         }
-      };
+      } catch {
+        // ignore parse errors
+      }
+    };
 
-      ws.onclose = () => {
-        setStatus("idle");
-        if (mountedRef.current) {
-          reconnectTimerRef.current = setTimeout(connect, 3000);
-        }
-      };
+    ws.onclose = () => {
+      setStatus("idle");
+      if (mountedRef.current) {
+        reconnectTimerRef.current = setTimeout(connect, 3000);
+      }
+    };
 
-      ws.onerror = () => {
-        ws.close();
-      };
-    }
+    ws.onerror = () => {
+      ws.close();
+    };
+  }, [setStatus, setTranscription, addResponseChunk, clearResponse, clearAll, setError]);
+
+  useEffect(() => {
+    mountedRef.current = true;
 
     connect();
 
@@ -102,7 +118,7 @@ export function useWebSocket() {
       wsRef.current?.close();
       wsRef.current = null;
     };
-  }, [setStatus, setTranscription, addResponseChunk, clearResponse, setError]);
+  }, [connect]);
 
   const send = useCallback((command: string) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -110,5 +126,5 @@ export function useWebSocket() {
     }
   }, []);
 
-  return { send, disconnect };
+  return { send, disconnect, connect };
 }

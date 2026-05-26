@@ -1,0 +1,29 @@
+Este error es muy específico de Tauri (específicamente la versión 2). Ocurre porque la interfaz web de tu aplicación está intentando mover o arrastrar la ventana del sistema operativo, pero el modelo de seguridad bloquea la acción por falta de permisos explícitos.
+
+Aquí tienes la explicación de la causa y cómo solucionarlo:
+
+La causa principal
+En Tauri v2, se introdujo un estricto sistema de "Capacidades" (Capabilities) basado en listas blancas (IPC). Por motivos de seguridad, el frontend no puede ejecutar comandos del sistema (como modificar la ventana, leer archivos, etc.) a menos que se le otorgue permiso.
+
+Cuando intentas usar la función de arrastrar la ventana (probablemente al hacer clic en una barra de título personalizada con el atributo data-tauri-drag-region o llamando a appWindow.startDragging()), Tauri detecta que el comando IPC no está autorizado y lanza esa promesa rechazada.
+
+Cómo solucionarlo
+Debes registrar el permiso core:window:allow-start-dragging en la configuración de capacidades de tu proyecto de Tauri.
+
+Paso 1: Navega a la carpeta de tu backend de Tauri, generalmente en src-tauri/capabilities/.
+Paso 2: Abre tu archivo de configuración de capacidades (suele llamarse default.json, main.json o similar).
+Paso 3: Añade el permiso a la lista. El archivo debería verse algo así:
+
+JSON
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capability for the main window",
+  "windows": ["main"],
+  "permissions": [
+    "core:window:allow-start-dragging"
+  ]
+}
+Nota: Si estás configurando los permisos directamente en tu tauri.conf.json bajo la sección de plugins o app, asegúrate de añadir ese permiso específico en el array correspondiente.
+
+Paso 4: Guarda el archivo, detén el servidor de desarrollo de Tauri y vuelve a compilar/ejecutar el proyecto (npm run tauri dev o el comando que uses).

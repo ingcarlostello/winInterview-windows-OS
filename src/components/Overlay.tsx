@@ -7,14 +7,15 @@ interface OverlayProps {
   onPause: () => void;
   onResume: () => void;
   onClear: () => void;
+  onConnect: () => void;
 }
 
-export default function Overlay({ onPause, onResume, onClear }: OverlayProps) {
+export default function Overlay({ onPause, onResume, onClear, onConnect }: OverlayProps) {
   return (
     <div className="h-full w-full flex flex-col bg-black/50 backdrop-blur-xl rounded-xl border border-white/10 shadow-2xl">
-      <div className="flex items-center border-b border-white/10">
+      <div data-tauri-drag-region className="flex items-center border-b border-white/10">
         <StatusBar />
-        <Controls onPause={onPause} onResume={onResume} onClear={onClear} />
+        <Controls onPause={onPause} onResume={onResume} onClear={onClear} onConnect={onConnect} />
       </div>
       <Transcription />
       <Response />

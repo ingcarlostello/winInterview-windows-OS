@@ -21,6 +21,7 @@ interface InterviewState {
   clearResponse: () => void;
   setError: (error: string) => void;
   reset: () => void;
+  clearAll: () => void;
 }
 
 export const useInterviewStore = create<InterviewState>((set) => ({
@@ -38,7 +39,8 @@ export const useInterviewStore = create<InterviewState>((set) => ({
       responseChunks: [...state.responseChunks, chunk],
     })),
 
-  clearResponse: () => set({ responseChunks: [], transcription: "" }),
+  clearResponse: () => set({ responseChunks: [] }),
+  clearAll: () => set({ responseChunks: [], transcription: "" }),
 
   setError: (error) => set({ error, status: "error" }),
 
