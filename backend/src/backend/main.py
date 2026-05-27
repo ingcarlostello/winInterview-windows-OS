@@ -54,7 +54,7 @@ def build_agent_settings() -> AgentV1Settings:
                 provider=AgentV1SettingsAgentListenProvider_V1(
                     type="deepgram",
                     model="nova-3",
-                    language="es",
+                    language="en",
                     smart_format=True,
                 )
             ),
