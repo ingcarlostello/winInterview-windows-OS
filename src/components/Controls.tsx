@@ -1,68 +1,96 @@
+import { Mic, Pause, Play, Square } from "lucide-react";
 import { useInterviewStore } from "../stores/interview";
 
 interface ControlsProps {
   onPause: () => void;
   onResume: () => void;
-  onClear: () => void;
   onConnect: () => void;
   onDisconnect: () => void;
 }
 
-export default function Controls({ onPause, onResume, onClear, onConnect, onDisconnect }: ControlsProps) {
+export default function Controls({
+  onPause,
+  onResume,
+  onConnect,
+  onDisconnect,
+}: ControlsProps) {
   const status = useInterviewStore((s) => s.status);
   const isPaused = status === "paused";
+  const isActive =
+    status === "listening" || status === "thinking" || status === "responding";
 
   return (
-    <div className="flex items-center gap-1.5 ml-auto pr-3 h-16">
-      {status === "idle" || status === "error" ? (
-        <button
-          type="button"
-          onClick={onConnect}
-          className="px-2 py-0.5 text-[14px] font-medium rounded transition-colors cursor-pointer bg-blue-500/20 text-blue-400 hover:bg-blue-500/30"
-          title="Conectar a la sesión"
-        >
-          🔌 Conectar
-        </button>
-      ) : status === "connected" ? (
-        <button
-          type="button"
-          disabled
-          className="px-2 py-0.5 text-[14px] font-medium rounded transition-colors cursor-not-allowed bg-yellow-500/10 text-yellow-500/50"
-          title="Estableciendo conexión..."
-        >
-          ⏳ Conectando...
-        </button>
-      ) : (
-        <>
+    <div className="flex items-center justify-between px-3 pb-2">
+      <div className="flex items-center gap-2 mt-1 mb-1">
+        {status === "idle" || status === "error" ? (
           <button
             type="button"
-            onClick={onDisconnect}
-            className="px-2 py-0.5 text-[14px] font-medium rounded transition-colors cursor-pointer bg-red-500/20 text-red-400 hover:bg-red-500/30"
-            title="Terminar sesión"
+            onClick={onConnect}
+            className="flex items-center gap-1.5 mt-3 mb-1 px-3 py-1.5 text-xs font-bold rounded-lg bg-green-500/20 border border-green/30 text-green-400 hover:bg-green-500/50 transition-colors cursor-pointer"
           >
-            🔴 Terminar
+            <Mic size={13} />
+            Escuchar
           </button>
+        ) : status === "connected" ? (
           <button
             type="button"
-            onClick={() => (isPaused ? onResume() : onPause())}
-            className={`px-2 py-0.5 text-[14px] font-medium rounded transition-colors cursor-pointer ${isPaused
-              ? "bg-green-500/20 text-green-400 hover:bg-green-500/30"
-              : "bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30"
+            disabled
+            className="flex items-center gap-1.5 px-3 py-1.5 mt-3 mb-1 text-xs font-medium rounded-lg bg-green-600/50 text-white/70 cursor-not-allowed"
+          >
+            <svg
+              className="w-3.5 h-3.5 animate-spin"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+            </svg>
+            Conectando...
+          </button>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={() => (isPaused ? onResume() : onPause())}
+              className={`flex items-center gap-1.5 px-3 py-1.5 mt-3 mb-1 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
+                isPaused
+                  ? "border border-green/30 bg-green-600/50 text-green-400 hover:bg-green-500/50"
+                  : "border border-yellow/30 bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/50"
               }`}
-            title={isPaused ? "Reanudar escucha" : "Pausar escucha"}
-          >
-            {isPaused ? "▶ Reanudar" : "⏸ Pausar"}
-          </button>
-        </>
+            >
+              {isPaused ? (
+                <>
+                  <Play size={13} />
+                  Reanudar
+                </>
+              ) : (
+                <>
+                  <Pause size={13} />
+                  Pausar
+                </>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={onDisconnect}
+              className="flex items-center gap-1.5 px-3 py-1.5 mt-3 mb-1 text-xs font-bold rounded-lg border border-red/30 text-red-400 bg-red-500/20 hover:bg-red-500/50 transition-colors cursor-pointer"
+            >
+              <Square size={13} />
+              Finalizar
+            </button>
+          </>
+        )}
+      </div>
+      {isActive && (
+        <button
+          type="button"
+          className="flex items-center justify-center w-6 h-6 rounded-full bg-white/10 text-white/50 hover:bg-white/20 hover:text-white/80 transition-colors cursor-pointer text-xs"
+          title="Minimizar"
+        >
+          −
+        </button>
       )}
-      <button
-        type="button"
-        onClick={onClear}
-        className="px-2 py-0.5 text-[14px] font-medium text-white/50 hover:text-white/80 hover:bg-white/10 rounded transition-colors cursor-pointer"
-        title="Limpiar historial"
-      >
-        Limpiar
-      </button>
     </div>
   );
 }

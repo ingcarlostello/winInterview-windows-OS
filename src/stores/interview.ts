@@ -14,6 +14,7 @@ interface InterviewState {
   transcription: string;
   responseChunks: string[];
   error: string | null;
+  questionsAnswered: number;
 
   setStatus: (status: Status) => void;
   setTranscription: (text: string) => void;
@@ -22,6 +23,7 @@ interface InterviewState {
   setError: (error: string) => void;
   reset: () => void;
   clearAll: () => void;
+  incrementQuestionsAnswered: () => void;
 }
 
 export const useInterviewStore = create<InterviewState>((set) => ({
@@ -29,6 +31,7 @@ export const useInterviewStore = create<InterviewState>((set) => ({
   transcription: "",
   responseChunks: [],
   error: null,
+  questionsAnswered: 0,
 
   setStatus: (status) => set({ status }),
 
@@ -50,5 +53,9 @@ export const useInterviewStore = create<InterviewState>((set) => ({
       transcription: "",
       responseChunks: [],
       error: null,
+      questionsAnswered: 0,
     }),
+
+  incrementQuestionsAnswered: () =>
+    set((state) => ({ questionsAnswered: state.questionsAnswered + 1 })),
 }));

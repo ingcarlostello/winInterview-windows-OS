@@ -14,6 +14,7 @@ export function useWebSocket() {
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
   const intentionalCloseRef = useRef(false);
+  const prevStatusRef = useRef<Status>("idle");
 
   const setStatus = useInterviewStore((s) => s.setStatus);
   const setTranscription = useInterviewStore((s) => s.setTranscription);
@@ -22,6 +23,7 @@ export function useWebSocket() {
   const clearAll = useInterviewStore((s) => s.clearAll);
   const setError = useInterviewStore((s) => s.setError);
   const reset = useInterviewStore((s) => s.reset);
+  const incrementQuestionsAnswered = useInterviewStore((s) => s.incrementQuestionsAnswered);
 
   const disconnect = useCallback(() => {
     intentionalCloseRef.current = true;
@@ -77,6 +79,12 @@ export function useWebSocket() {
               paused: "paused",
             };
             const status = statusMap[rawStatus] || "idle";
+
+            if (prevStatusRef.current === "responding" && status === "listening") {
+              incrementQuestionsAnswered();
+            }
+            prevStatusRef.current = status;
+
             setStatus(status);
 
             if (rawStatus === "thinking") {
@@ -109,7 +117,7 @@ export function useWebSocket() {
     ws.onerror = () => {
       ws.close();
     };
-  }, [setStatus, setTranscription, addResponseChunk, clearResponse, clearAll, setError]);
+  }, [setStatus, setTranscription, addResponseChunk, clearResponse, clearAll, setError, incrementQuestionsAnswered]);
 
   useEffect(() => {
     mountedRef.current = true;

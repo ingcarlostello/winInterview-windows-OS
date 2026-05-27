@@ -8,7 +8,6 @@ export default function App() {
     <Overlay
       onPause={() => send("pause")}
       onResume={() => send("resume")}
-      onClear={() => send("clear")}
       onConnect={connect}
       onDisconnect={disconnect}
     />
