@@ -7,6 +7,7 @@ import uuid
 from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from openai import AsyncOpenAI
 from websockets.exceptions import ConnectionClosed
 
@@ -22,7 +23,7 @@ from deepgram.agent.v1.types import (
 )
 
 from backend.audio.capture import AudioCapture
-from backend.llm.prompt import get_system_prompt
+from backend.llm.prompt import get_system_prompt, save_custom_prompt, delete_custom_prompt, get_active_prompt_info
 from backend.ws_manager import ConnectionManager
 
 load_dotenv()
@@ -66,6 +67,36 @@ async def health():
     return {"status": "ok", "connections": ws_manager.active_count}
 
 
+class PromptRequest(BaseModel):
+    language: str
+    prompt: str
+
+
+@app.get("/prompt")
+async def get_prompt(language: str = "es"):
+    if language not in ("es", "en"):
+        language = "es"
+    return get_active_prompt_info(language)
+
+
+@app.post("/prompt")
+async def set_prompt(req: PromptRequest):
+    if req.language not in ("es", "en"):
+        return {"success": False, "error": "Invalid language"}
+    if not req.prompt.strip():
+        return {"success": False, "error": "Prompt cannot be empty"}
+    success = save_custom_prompt(req.language, req.prompt)
+    return {"success": success}
+
+
+@app.delete("/prompt")
+async def clear_prompt(language: str = "es"):
+    if language not in ("es", "en"):
+        language = "es"
+    delete_custom_prompt(language)
+    return {"success": True}
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     session_id = str(uuid.uuid4())[:8]
@@ -96,6 +127,7 @@ async def websocket_endpoint(websocket: WebSocket):
         response_text = ""
         first_chunk = True
 
+        logger.info("Petición armada enviada a NVIDIA (historial de conversación): %s", conversation_history)
         try:
             completion = await nvidia_client.chat.completions.create(
                 model="openai/gpt-oss-20b",
@@ -116,6 +148,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     response_text += content
                     await ws_manager.send_response_chunk(sid, content)
 
+            logger.info("Respuesta completa devuelta por NVIDIA: %s", response_text)
             conversation_history.append({"role": "assistant", "content": response_text})
         except Exception as e:
             logger.error("NVIDIA streaming error: %s", e)
@@ -251,6 +284,16 @@ async def websocket_endpoint(websocket: WebSocket):
                     {"role": "system", "content": get_system_prompt(session_language)}
                 ]
                 await ws_manager.send_status(session_id, "cleared")
+            elif msg.startswith("set_prompt:"):
+                custom_prompt = msg[len("set_prompt:"):]
+                if custom_prompt.strip():
+                    save_custom_prompt(session_language, custom_prompt)
+                    conversation_history[0]["content"] = custom_prompt.strip()
+                    await ws_manager.send_status(session_id, "prompt_saved")
+            elif msg == "clear_prompt":
+                delete_custom_prompt(session_language)
+                conversation_history[0]["content"] = get_system_prompt(session_language)
+                await ws_manager.send_status(session_id, "prompt_cleared")
     except (WebSocketDisconnect, ConnectionClosed, RuntimeError):
         logger.info("Client disconnected: %s", session_id)
     finally:

@@ -19,7 +19,14 @@ export type TranslationKey =
   | "generatingResponse"
   | "placeholderResponse"
   | "questionSingular"
-  | "questionPlural";
+  | "questionPlural"
+  | "customContext"
+  | "placeholderPrompt"
+  | "btnSave"
+  | "btnRestoreDefault"
+  | "promptSaved"
+  | "promptRestored"
+  | "btnTogglePrompt";
 
 const translations: Record<Language, Record<TranslationKey, string>> = {
   es: {
@@ -42,6 +49,13 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     placeholderResponse: "La respuesta aparecerá aquí",
     questionSingular: "1 pregunta respondida",
     questionPlural: "{count} preguntas respondidas",
+    customContext: "Contexto Personalizado",
+    placeholderPrompt: "Ej: Soy desarrollador senior con 5 años en React, postulando a una empresa de fintech. Responde de forma concisa y técnica.",
+    btnSave: "Guardar",
+    btnRestoreDefault: "Restaurar default",
+    promptSaved: "Prompt guardado",
+    promptRestored: "Prompt restaurado",
+    btnTogglePrompt: "Editar prompt",
   },
   en: {
     statusDisconnected: "Disconnected",
@@ -63,6 +77,13 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     placeholderResponse: "Response will appear here",
     questionSingular: "1 question answered",
     questionPlural: "{count} questions answered",
+    customContext: "Custom Context",
+    placeholderPrompt: "E.g: I'm a senior developer with 5 years in React, applying to a fintech company. Respond concisely and technically.",
+    btnSave: "Save",
+    btnRestoreDefault: "Restore default",
+    promptSaved: "Prompt saved",
+    promptRestored: "Prompt restored",
+    btnTogglePrompt: "Edit prompt",
   },
 };
 

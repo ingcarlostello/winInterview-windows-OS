@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
 export type Language = "es" | "en";
 
@@ -11,6 +12,11 @@ export type Status =
   | "paused"
   | "error";
 
+interface CustomPrompts {
+  es: string;
+  en: string;
+}
+
 interface InterviewState {
   status: Status;
   language: Language;
@@ -18,6 +24,8 @@ interface InterviewState {
   responseChunks: string[];
   error: string | null;
   questionsAnswered: number;
+  customPrompts: CustomPrompts;
+  showPromptEditor: boolean;
 
   setStatus: (status: Status) => void;
   setLanguage: (language: Language) => void;
@@ -28,42 +36,83 @@ interface InterviewState {
   reset: () => void;
   clearAll: () => void;
   incrementQuestionsAnswered: () => void;
+  setCustomPrompt: (language: Language, prompt: string) => void;
+  clearCustomPrompt: (language: Language) => void;
+  getCustomPrompt: () => string;
+  hasCustomPrompt: () => boolean;
+  togglePromptEditor: () => void;
 }
 
-export const useInterviewStore = create<InterviewState>((set) => ({
-  status: "idle",
-  language: "es",
-  transcription: "",
-  responseChunks: [],
-  error: null,
-  questionsAnswered: 0,
-
-  setStatus: (status) => set({ status }),
-
-  setLanguage: (language) => set({ language }),
-
-  setTranscription: (text) => set({ transcription: text }),
-
-  addResponseChunk: (chunk) =>
-    set((state) => ({
-      responseChunks: [...state.responseChunks, chunk],
-    })),
-
-  clearResponse: () => set({ responseChunks: [] }),
-  clearAll: () => set({ responseChunks: [], transcription: "" }),
-
-  setError: (error) => set({ error, status: "error" }),
-
-  reset: () =>
-    set({
+export const useInterviewStore = create<InterviewState>()(
+  persist(
+    (set, get) => ({
       status: "idle",
       language: "es",
       transcription: "",
       responseChunks: [],
       error: null,
       questionsAnswered: 0,
-    }),
+      customPrompts: { es: "", en: "" },
+      showPromptEditor: false,
 
-  incrementQuestionsAnswered: () =>
-    set((state) => ({ questionsAnswered: state.questionsAnswered + 1 })),
-}));
+      setStatus: (status) => set({ status }),
+
+      setLanguage: (language) => set({ language }),
+
+      setTranscription: (text) => set({ transcription: text }),
+
+      addResponseChunk: (chunk) =>
+        set((state) => ({
+          responseChunks: [...state.responseChunks, chunk],
+        })),
+
+      clearResponse: () => set({ responseChunks: [] }),
+      clearAll: () => set({ responseChunks: [], transcription: "" }),
+
+      setError: (error) => set({ error, status: "error" }),
+
+      reset: () =>
+        set({
+          status: "idle",
+          language: "es",
+          transcription: "",
+          responseChunks: [],
+          error: null,
+          questionsAnswered: 0,
+        }),
+
+      incrementQuestionsAnswered: () =>
+        set((state) => ({ questionsAnswered: state.questionsAnswered + 1 })),
+
+      setCustomPrompt: (language, prompt) =>
+        set((state) => ({
+          customPrompts: { ...state.customPrompts, [language]: prompt },
+        })),
+
+      clearCustomPrompt: (language) =>
+        set((state) => ({
+          customPrompts: { ...state.customPrompts, [language]: "" },
+        })),
+
+      getCustomPrompt: () => {
+        const { language, customPrompts } = get();
+        return customPrompts[language] || "";
+      },
+
+      hasCustomPrompt: () => {
+        const { language, customPrompts } = get();
+        return !!customPrompts[language]?.trim();
+      },
+
+      togglePromptEditor: () =>
+        set((state) => ({ showPromptEditor: !state.showPromptEditor })),
+    }),
+    {
+      name: "interview-settings",
+      partialize: (state) => ({
+        customPrompts: state.customPrompts,
+        language: state.language,
+      }),
+    },
+  ),
+);

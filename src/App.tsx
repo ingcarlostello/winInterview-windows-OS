@@ -2,7 +2,7 @@ import Overlay from "./components/Overlay";
 import { useWebSocket } from "./hooks/useWebSocket";
 
 export default function App() {
-  const { send, disconnect, connect } = useWebSocket();
+  const { send, disconnect, connect, setPrompt, restoreDefaultPrompt } = useWebSocket();
 
   return (
     <Overlay
@@ -10,6 +10,8 @@ export default function App() {
       onResume={() => send("resume")}
       onConnect={connect}
       onDisconnect={disconnect}
+      onSavePrompt={setPrompt}
+      onRestorePrompt={restoreDefaultPrompt}
     />
   );
 }

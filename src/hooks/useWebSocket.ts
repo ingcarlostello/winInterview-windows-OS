@@ -15,6 +15,7 @@ export function useWebSocket() {
   const mountedRef = useRef(true);
   const intentionalCloseRef = useRef(false);
   const prevStatusRef = useRef<Status>("idle");
+  const connectRef = useRef<() => void>(() => {});
 
   const setStatus = useInterviewStore((s) => s.setStatus);
   const setTranscription = useInterviewStore((s) => s.setTranscription);
@@ -94,12 +95,15 @@ export function useWebSocket() {
             break;
           }
           case "transcription":
+            console.log("Petición armada (Pregunta escuchada):", msg.data.text);
             setTranscription(msg.data.text);
             break;
           case "chunk":
+            console.log("Respuesta recibida (chunk):", msg.data.content);
             addResponseChunk(msg.data.content);
             break;
           case "error":
+            console.log("Error recibido del backend:", msg.data.message);
             setError(msg.data.message);
             break;
         }
@@ -111,7 +115,11 @@ export function useWebSocket() {
     ws.onclose = () => {
       setStatus("idle");
       if (mountedRef.current && !intentionalCloseRef.current) {
-        reconnectTimerRef.current = setTimeout(connect, 3000);
+        reconnectTimerRef.current = setTimeout(() => {
+          if (wsRef.current?.readyState !== WebSocket.OPEN) {
+            connectRef.current();
+          }
+        }, 3000);
       }
     };
 
@@ -119,6 +127,10 @@ export function useWebSocket() {
       ws.close();
     };
   }, [setStatus, setTranscription, addResponseChunk, clearResponse, clearAll, setError, incrementQuestionsAnswered]);
+
+  useEffect(() => {
+    connectRef.current = connect;
+  }, [connect]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -142,5 +154,17 @@ export function useWebSocket() {
     }
   }, []);
 
-  return { send, disconnect, connect };
+  const setPrompt = useCallback((prompt: string) => {
+    send(`set_prompt:${prompt}`);
+    const language = useInterviewStore.getState().language;
+    useInterviewStore.getState().setCustomPrompt(language, prompt);
+  }, [send]);
+
+  const restoreDefaultPrompt = useCallback(() => {
+    send("clear_prompt");
+    const language = useInterviewStore.getState().language;
+    useInterviewStore.getState().clearCustomPrompt(language);
+  }, [send]);
+
+  return { send, disconnect, connect, setPrompt, restoreDefaultPrompt };
 }
