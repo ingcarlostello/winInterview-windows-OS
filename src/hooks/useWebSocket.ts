@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback } from "react";
 import { useInterviewStore } from "../stores/interview";
 import type { Status } from "../stores/interview";
 
-const WS_URL = "ws://localhost:8000/ws";
+const WS_BASE = "ws://localhost:8000/ws";
 
 interface WSMessage {
   type: string;
@@ -51,7 +51,8 @@ export function useWebSocket() {
 
     setStatus("connected");
 
-    const ws = new WebSocket(WS_URL);
+    const language = useInterviewStore.getState().language;
+    const ws = new WebSocket(`${WS_BASE}?lang=${language}`);
     wsRef.current = ws;
 
     ws.onopen = () => {

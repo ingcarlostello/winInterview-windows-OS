@@ -1,8 +1,10 @@
 import { useInterviewStore } from "../stores/interview";
+import { useTranslation } from "../hooks/useTranslation";
 
 export default function Response() {
   const responseChunks = useInterviewStore((s) => s.responseChunks);
   const status = useInterviewStore((s) => s.status);
+  const { t } = useTranslation();
 
   const fullText = responseChunks.join("");
   const hasContent = fullText.length > 0;
@@ -19,7 +21,7 @@ export default function Response() {
       <div className="flex items-center justify-between mb-1.5">
         <div className="flex items-center gap-1.5 mt-1">
           <p className="text-[10px] uppercase tracking-wider text-green-400/80 font-medium">
-            Copiloto IA
+            {t("aiCopilot")}
           </p>
           {(status === "listening" || status === "thinking" || status === "responding") && (
             <svg className="w-3.5 h-3.5 text-green-400 icon-spin" viewBox="0 0 24 24" fill="currentColor">
@@ -37,7 +39,7 @@ export default function Response() {
               <rect x="9" y="9" width="13" height="13" rx="2" />
               <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
             </svg>
-            Copiar
+            {t("btnCopy")}
           </button>
         )}
       </div>
@@ -49,7 +51,7 @@ export default function Response() {
               <span className="w-1.5 h-1.5 rounded-full bg-green-400/60 dot-pulse-anim" style={{ animationDelay: "200ms" }} />
               <span className="w-1.5 h-1.5 rounded-full bg-green-400/60 dot-pulse-anim" style={{ animationDelay: "400ms" }} />
             </span>
-            <span className="text-xs">Generando respuesta...</span>
+            <span className="text-xs">{t("generatingResponse")}</span>
           </div>
         ) : hasContent ? (
           <p className="text-green-400 text-sm leading-relaxed">
@@ -60,7 +62,7 @@ export default function Response() {
           </p>
         ) : (
           <p className="text-[14px] text-white/20 italic text-sm text-center py-4">
-            La respuesta aparecerá aquí
+            {t("placeholderResponse")}
           </p>
         )}
       </div>

@@ -1,31 +1,37 @@
 import { Bot } from "lucide-react";
 import { useInterviewStore } from "../stores/interview";
 import type { Status } from "../stores/interview";
+import LanguageSelector from "./LanguageSelector";
+import { useTranslation } from "../hooks/useTranslation";
 
-const statusConfig: Record<Status, { label: string; color: string; pulse: boolean; showMic: boolean }> = {
-  idle: { label: "Desconectado", color: "bg-gray-500", pulse: false, showMic: false },
-  connected: { label: "Listo", color: "bg-green-500", pulse: false, showMic: false },
-  listening: { label: "Escuchando", color: "bg-green-500", pulse: true, showMic: true },
-  thinking: { label: "Pensando...", color: "bg-green-500", pulse: true, showMic: true },
-  responding: { label: "Respondiendo", color: "bg-green-500", pulse: false, showMic: true },
-  paused: { label: "Pausado", color: "bg-orange-500", pulse: false, showMic: false },
-  error: { label: "Error", color: "bg-red-500", pulse: false, showMic: false },
+const statusConfig: Record<Status, { labelKey: string; color: string; pulse: boolean; showMic: boolean }> = {
+  idle: { labelKey: "statusDisconnected", color: "bg-gray-500", pulse: false, showMic: false },
+  connected: { labelKey: "statusReady", color: "bg-green-500", pulse: false, showMic: false },
+  listening: { labelKey: "statusListening", color: "bg-green-500", pulse: true, showMic: true },
+  thinking: { labelKey: "statusThinking", color: "bg-green-500", pulse: true, showMic: true },
+  responding: { labelKey: "statusResponding", color: "bg-green-500", pulse: false, showMic: true },
+  paused: { labelKey: "statusPaused", color: "bg-orange-500", pulse: false, showMic: false },
+  error: { labelKey: "statusDisconnected", color: "bg-red-500", pulse: false, showMic: false },
 };
 
 export default function StatusBar() {
   const status = useInterviewStore((s) => s.status);
   const error = useInterviewStore((s) => s.error);
   const config = statusConfig[status];
+  const { t } = useTranslation();
+
+  const isDisabled = status !== "idle" && status !== "error";
 
   return (
-    <div data-tauri-drag-region className="flex items-center justify-between px-3 py-2.5 w-full">
-      <div className="flex items-center gap-2">
+    <div data-tauri-drag-region className="flex items-center justify-between px-3 py-2.5 w-full gap-2">
+      <div className="flex items-center gap-2 shrink-0">
         <div className="border-1 border-solid p-1 border-green-500/30 bg-green-500/10 rounded-xl">
           <Bot className="text-green-500" size={20} />
         </div>
         <span className="text-white font-semibold text-xs">Interview Copilot</span>
       </div>
-      <div className="flex items-center gap-2">
+      <LanguageSelector disabled={isDisabled} />
+      <div className="flex items-center gap-2 shrink-0">
         <span className="relative flex h-2 w-2">
           <span
             className={`absolute inline-flex h-full w-full rounded-full ${config.color} ${config.pulse ? "animate-ping opacity-75" : ""}`}
@@ -35,7 +41,7 @@ export default function StatusBar() {
           />
         </span>
         <span className={`text-xs font-medium ${status === "error" ? "text-red-400" : "text-white/70"}`}>
-          {config.label}
+          {t(config.labelKey as Parameters<typeof t>[0])}
         </span>
         {config.showMic && (
           <svg className="w-3.5 h-3.5 text-green-400 animate-pulse" viewBox="0 0 24 24" fill="currentColor">

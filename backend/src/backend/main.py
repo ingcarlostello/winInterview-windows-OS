@@ -7,6 +7,7 @@ import uuid
 from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from openai import AsyncOpenAI
 from websockets.exceptions import ConnectionClosed
 
 from deepgram import DeepgramClient
@@ -19,11 +20,9 @@ from deepgram.agent.v1.types import (
     AgentV1SettingsAudio,
     AgentV1SettingsAudioInput,
 )
-from deepgram.types.think_settings_v1 import ThinkSettingsV1
-from deepgram.types.think_settings_v1provider import ThinkSettingsV1Provider_OpenAi
 
 from backend.audio.capture import AudioCapture
-from backend.llm.prompt import SYSTEM_PROMPT
+from backend.llm.prompt import get_system_prompt
 from backend.ws_manager import ConnectionManager
 
 load_dotenv()
@@ -44,7 +43,7 @@ app.add_middleware(
 ws_manager = ConnectionManager()
 
 
-def build_agent_settings() -> AgentV1Settings:
+def build_agent_settings(language: str = "es") -> AgentV1Settings:
     return AgentV1Settings(
         audio=AgentV1SettingsAudio(
             input=AgentV1SettingsAudioInput(encoding="linear16", sample_rate=16000),
@@ -54,16 +53,9 @@ def build_agent_settings() -> AgentV1Settings:
                 provider=AgentV1SettingsAgentListenProvider_V1(
                     type="deepgram",
                     model="nova-3",
-                    language="en",
+                    language=language,
                     smart_format=True,
                 )
-            ),
-            think=ThinkSettingsV1(
-                provider=ThinkSettingsV1Provider_OpenAi(
-                    type="open_ai",
-                    model="gpt-4o-mini",
-                ),
-                prompt=SYSTEM_PROMPT,
             ),
         ),
     )
@@ -84,7 +76,52 @@ async def websocket_endpoint(websocket: WebSocket):
     agent_ready = threading.Event()
     agent_conn: object = None
     agent_ctx: object = None
-    response_text: str = ""
+    session_language: str = websocket.query_params.get("lang", "es")
+    if session_language not in ("es", "en"):
+        session_language = "es"
+
+    conversation_history: list[dict[str, str]] = [
+        {"role": "system", "content": get_system_prompt(session_language)}
+    ]
+
+    nvidia_client = AsyncOpenAI(
+        base_url="https://integrate.api.nvidia.com/v1",
+        api_key=os.getenv("NVIDIA_API_KEY"),
+    )
+
+    async def stream_nvidia_response(user_message: str, sid: str) -> None:
+        conversation_history.append({"role": "user", "content": user_message})
+        await ws_manager.send_status(sid, "thinking")
+
+        response_text = ""
+        first_chunk = True
+
+        try:
+            completion = await nvidia_client.chat.completions.create(
+                model="openai/gpt-oss-20b",
+                messages=conversation_history,
+                temperature=1,
+                top_p=1,
+                max_tokens=4096,
+                stream=True,
+            )
+            async for chunk in completion:
+                if not getattr(chunk, "choices", None):
+                    continue
+                content = chunk.choices[0].delta.content
+                if content:
+                    if first_chunk:
+                        await ws_manager.send_status(sid, "responding")
+                        first_chunk = False
+                    response_text += content
+                    await ws_manager.send_response_chunk(sid, content)
+
+            conversation_history.append({"role": "assistant", "content": response_text})
+        except Exception as e:
+            logger.error("NVIDIA streaming error: %s", e)
+            await ws_manager.send_error(sid, str(e))
+
+        await ws_manager.send_status(sid, "listening")
 
     def on_agent_message(result) -> None:
         msg_type = getattr(result, "type", None)
@@ -104,12 +141,6 @@ async def websocket_endpoint(websocket: WebSocket):
                 asyncio.run_coroutine_threadsafe(
                     _on_user_text(session_id, content), loop
                 )
-            elif role == "assistant":
-                asyncio.run_coroutine_threadsafe(
-                    _on_assistant_text(session_id, content), loop
-                )
-        elif msg_type == "AgentThinking":
-            pass
         elif msg_type == "Error":
             desc = getattr(result, "description", str(result))
             logger.error("Agent error: %s", desc)
@@ -121,23 +152,8 @@ async def websocket_endpoint(websocket: WebSocket):
             logger.warning("Agent warning: %s", desc)
 
     async def _on_user_text(sid: str, text: str) -> None:
-        nonlocal response_text
-        response_text = ""
-        await ws_manager.send_status(sid, "thinking")
         await ws_manager.send_transcription(sid, text)
-
-    async def _on_assistant_text(sid: str, text: str) -> None:
-        nonlocal response_text
-        response_text = text
-        await ws_manager.send_status(sid, "responding")
-        lines = text.split("\n")
-        for i, line in enumerate(lines):
-            chunk = line
-            if i < len(lines) - 1:
-                chunk += "\n"
-            await ws_manager.send_response_chunk(sid, chunk)
-            await asyncio.sleep(0.04)
-        await ws_manager.send_status(sid, "listening")
+        await stream_nvidia_response(text, sid)
 
     def _agent_thread() -> None:
         nonlocal agent_conn, agent_ctx
@@ -156,7 +172,7 @@ async def websocket_endpoint(websocket: WebSocket):
         agent_conn.on(EventType.ERROR, lambda e: logger.error("Agent WS error: %s", e))
 
         try:
-            agent_conn.send_settings(build_agent_settings())
+            agent_conn.send_settings(build_agent_settings(session_language))
             agent_conn.start_listening()
         except Exception as e:
             logger.error("Agent listen error: %s", e)
@@ -231,7 +247,9 @@ async def websocket_endpoint(websocket: WebSocket):
                 await audio_capture.start()
                 await ws_manager.send_status(session_id, "listening")
             elif msg == "clear":
-                response_text = ""
+                conversation_history = [
+                    {"role": "system", "content": get_system_prompt(session_language)}
+                ]
                 await ws_manager.send_status(session_id, "cleared")
     except (WebSocketDisconnect, ConnectionClosed, RuntimeError):
         logger.info("Client disconnected: %s", session_id)

@@ -1,5 +1,7 @@
 import { create } from "zustand";
 
+export type Language = "es" | "en";
+
 export type Status =
   | "idle"
   | "connected"
@@ -11,12 +13,14 @@ export type Status =
 
 interface InterviewState {
   status: Status;
+  language: Language;
   transcription: string;
   responseChunks: string[];
   error: string | null;
   questionsAnswered: number;
 
   setStatus: (status: Status) => void;
+  setLanguage: (language: Language) => void;
   setTranscription: (text: string) => void;
   addResponseChunk: (chunk: string) => void;
   clearResponse: () => void;
@@ -28,12 +32,15 @@ interface InterviewState {
 
 export const useInterviewStore = create<InterviewState>((set) => ({
   status: "idle",
+  language: "es",
   transcription: "",
   responseChunks: [],
   error: null,
   questionsAnswered: 0,
 
   setStatus: (status) => set({ status }),
+
+  setLanguage: (language) => set({ language }),
 
   setTranscription: (text) => set({ transcription: text }),
 
@@ -50,6 +57,7 @@ export const useInterviewStore = create<InterviewState>((set) => ({
   reset: () =>
     set({
       status: "idle",
+      language: "es",
       transcription: "",
       responseChunks: [],
       error: null,

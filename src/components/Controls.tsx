@@ -1,5 +1,6 @@
 import { Mic, Pause, Play, Square } from "lucide-react";
 import { useInterviewStore } from "../stores/interview";
+import { useTranslation } from "../hooks/useTranslation";
 
 interface ControlsProps {
   onPause: () => void;
@@ -15,6 +16,7 @@ export default function Controls({
   onDisconnect,
 }: ControlsProps) {
   const status = useInterviewStore((s) => s.status);
+  const { t } = useTranslation();
   const isPaused = status === "paused";
   const isActive =
     status === "listening" || status === "thinking" || status === "responding";
@@ -29,7 +31,7 @@ export default function Controls({
             className="flex items-center gap-1.5 mt-3 mb-1 px-3 py-1.5 text-xs font-bold rounded-lg bg-green-500/20 border border-green/30 text-green-400 hover:bg-green-500/50 transition-colors cursor-pointer"
           >
             <Mic size={13} />
-            Escuchar
+            {t("btnListen")}
           </button>
         ) : status === "connected" ? (
           <button
@@ -46,7 +48,7 @@ export default function Controls({
             >
               <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
             </svg>
-            Conectando...
+            {t("btnConnecting")}
           </button>
         ) : (
           <>
@@ -62,12 +64,12 @@ export default function Controls({
               {isPaused ? (
                 <>
                   <Play size={13} />
-                  Reanudar
+                  {t("btnResume")}
                 </>
               ) : (
                 <>
                   <Pause size={13} />
-                  Pausar
+                  {t("btnPause")}
                 </>
               )}
             </button>
@@ -77,7 +79,7 @@ export default function Controls({
               className="flex items-center gap-1.5 px-3 py-1.5 mt-3 mb-1 text-xs font-bold rounded-lg border border-red/30 text-red-400 bg-red-500/20 hover:bg-red-500/50 transition-colors cursor-pointer"
             >
               <Square size={13} />
-              Finalizar
+              {t("btnEnd")}
             </button>
           </>
         )}
