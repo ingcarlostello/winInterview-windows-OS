@@ -1,11 +1,8 @@
 import asyncio
-import logging
 import threading
 from collections.abc import Callable
 
 import pyaudio
-
-logger = logging.getLogger(__name__)
 
 
 class AudioCapture:
@@ -41,13 +38,11 @@ class AudioCapture:
                 input=True,
                 frames_per_buffer=self.FRAME_SIZE,
             )
-        except OSError as e:
-            logger.error("Failed to open audio device: %s", e)
+        except OSError:
             return
 
         self._running = True
         self._loop_task = asyncio.create_task(self._capture_loop())
-        logger.info("Audio capture started")
 
     async def stop(self) -> None:
         self._running = False
@@ -67,7 +62,6 @@ class AudioCapture:
             except OSError:
                 pass
             self._stream = None
-        logger.info("Audio capture stopped")
 
     async def _capture_loop(self) -> None:
         loop = asyncio.get_running_loop()
@@ -89,8 +83,8 @@ class AudioCapture:
             try:
                 if self._on_audio_frame:
                     self._on_audio_frame(frame)
-            except Exception as e:
-                logger.debug("Audio frame callback error: %s", e)
+            except Exception:
+                pass
 
             await asyncio.sleep(0.001)
 

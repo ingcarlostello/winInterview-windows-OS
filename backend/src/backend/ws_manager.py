@@ -1,9 +1,6 @@
 import json
-import logging
 
 from fastapi import WebSocket
-
-logger = logging.getLogger(__name__)
 
 
 class ConnectionManager:
@@ -13,12 +10,10 @@ class ConnectionManager:
     async def connect(self, session_id: str, websocket: WebSocket) -> None:
         await websocket.accept()
         self._connections[session_id] = websocket
-        logger.info("WebSocket connected: %s", session_id)
 
     def disconnect(self, session_id: str) -> None:
         if session_id in self._connections:
             del self._connections[session_id]
-            logger.info("WebSocket disconnected: %s", session_id)
 
     async def send(self, session_id: str, msg_type: str, data: dict) -> None:
         ws = self._connections.get(session_id)
@@ -27,8 +22,8 @@ class ConnectionManager:
                 await ws.send_text(
                     json.dumps({"type": msg_type, "data": data}, ensure_ascii=False)
                 )
-            except Exception as e:
-                logger.error("Send error for %s: %s", session_id, e)
+            except Exception:
+                pass
 
     async def send_status(self, session_id: str, status: str) -> None:
         await self.send(session_id, "status", {"status": status})

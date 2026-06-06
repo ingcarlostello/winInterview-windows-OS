@@ -1,5 +1,4 @@
 import asyncio
-import logging
 import os
 import threading
 import uuid
@@ -27,9 +26,6 @@ from backend.llm.prompt import get_system_prompt, save_custom_prompt, delete_cus
 from backend.ws_manager import ConnectionManager
 
 load_dotenv()
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Interview Responder Backend")
 
@@ -86,7 +82,6 @@ async def set_prompt(req: PromptRequest):
     if not req.prompt.strip():
         return {"success": False, "error": "Prompt cannot be empty"}
     success = save_custom_prompt(req.language, req.prompt)
-    logger.info("Prompt saved - language=%s, prompt='%s'", req.language, req.prompt)
     return {"success": success}
 
 
@@ -95,7 +90,6 @@ async def clear_prompt(language: str = "es"):
     if language not in ("es", "en"):
         language = "es"
     delete_custom_prompt(language)
-    logger.info("Prompt deleted - language=%s", language)
     return {"success": True}
 
 
@@ -129,7 +123,6 @@ async def websocket_endpoint(websocket: WebSocket):
         response_text = ""
         first_chunk = True
 
-        logger.info("Petición armada enviada a NVIDIA (historial de conversación): %s", conversation_history)
         try:
             completion = await nvidia_client.chat.completions.create(
                 model="openai/gpt-oss-20b",
@@ -150,10 +143,8 @@ async def websocket_endpoint(websocket: WebSocket):
                     response_text += content
                     await ws_manager.send_response_chunk(sid, content)
 
-            logger.info("Respuesta completa devuelta por NVIDIA: %s", response_text)
             conversation_history.append({"role": "assistant", "content": response_text})
         except Exception as e:
-            logger.error("NVIDIA streaming error: %s", e)
             await ws_manager.send_error(sid, str(e))
 
         await ws_manager.send_status(sid, "listening")
@@ -178,13 +169,11 @@ async def websocket_endpoint(websocket: WebSocket):
                 )
         elif msg_type == "Error":
             desc = getattr(result, "description", str(result))
-            logger.error("Agent error: %s", desc)
             asyncio.run_coroutine_threadsafe(
                 ws_manager.send_error(session_id, desc), loop
             )
         elif msg_type == "Warning":
-            desc = getattr(result, "description", "")
-            logger.warning("Agent warning: %s", desc)
+            pass
 
     async def _on_user_text(sid: str, text: str) -> None:
         await ws_manager.send_transcription(sid, text)
@@ -194,23 +183,22 @@ async def websocket_endpoint(websocket: WebSocket):
         nonlocal agent_conn, agent_ctx
         api_key = os.getenv("DEEPGRAM_API_KEY")
         if not api_key:
-            logger.error("No DEEPGRAM_API_KEY")
             return
 
         client = DeepgramClient(api_key=api_key)
         agent_ctx = client.agent.v1.connect()
         agent_conn = agent_ctx.__enter__()
 
-        agent_conn.on(EventType.OPEN, lambda _: logger.info("Agent connection opened"))
+        agent_conn.on(EventType.OPEN, lambda _: None)
         agent_conn.on(EventType.MESSAGE, on_agent_message)
-        agent_conn.on(EventType.CLOSE, lambda _: logger.info("Agent connection closed"))
-        agent_conn.on(EventType.ERROR, lambda e: logger.error("Agent WS error: %s", e))
+        agent_conn.on(EventType.CLOSE, lambda _: None)
+        agent_conn.on(EventType.ERROR, lambda e: None)
 
         try:
             agent_conn.send_settings(build_agent_settings(session_language))
             agent_conn.start_listening()
-        except Exception as e:
-            logger.error("Agent listen error: %s", e)
+        except Exception:
+            pass
         finally:
             agent_conn = None
             try:
@@ -222,7 +210,6 @@ async def websocket_endpoint(websocket: WebSocket):
     agent_thread.start()
 
     if not agent_ready.wait(timeout=15):
-        logger.error("Agent settings not applied within timeout")
         await ws_manager.send_error(session_id, "Agent connection timeout")
         return
 
@@ -264,8 +251,8 @@ async def websocket_endpoint(websocket: WebSocket):
                             pass
 
                     await loop.run_in_executor(None, _send_ka)
-                except Exception as e:
-                    logger.debug("Keepalive error: %s", e)
+                except Exception:
+                    pass
             await asyncio.sleep(3)
 
     ka_task = asyncio.create_task(keepalive_loop())
@@ -291,15 +278,13 @@ async def websocket_endpoint(websocket: WebSocket):
                 if custom_prompt.strip():
                     save_custom_prompt(session_language, custom_prompt)
                     conversation_history[0]["content"] = custom_prompt.strip()
-                    logger.info("WebSocket prompt saved - session=%s, language=%s, prompt='%s'", session_id, session_language, custom_prompt.strip())
                     await ws_manager.send_status(session_id, "prompt_saved")
             elif msg == "clear_prompt":
                 delete_custom_prompt(session_language)
                 conversation_history[0]["content"] = get_system_prompt(session_language)
-                logger.info("WebSocket prompt cleared - session=%s, language=%s", session_id, session_language)
                 await ws_manager.send_status(session_id, "prompt_cleared")
     except (WebSocketDisconnect, ConnectionClosed, RuntimeError):
-        logger.info("Client disconnected: %s", session_id)
+        pass
     finally:
         if ka_task:
             ka_task.cancel()

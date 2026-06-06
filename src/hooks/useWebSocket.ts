@@ -95,15 +95,12 @@ export function useWebSocket() {
             break;
           }
           case "transcription":
-            console.log("Petición armada (Pregunta escuchada):", msg.data.text);
             setTranscription(msg.data.text);
             break;
           case "chunk":
-            console.log("Respuesta recibida (chunk):", msg.data.content);
             addResponseChunk(msg.data.content);
             break;
           case "error":
-            console.log("Error recibido del backend:", msg.data.message);
             setError(msg.data.message);
             break;
         }
