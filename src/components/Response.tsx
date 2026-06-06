@@ -1,5 +1,15 @@
+import ReactMarkdown from "react-markdown";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { useInterviewStore } from "../stores/interview";
 import { useTranslation } from "../hooks/useTranslation";
+
+interface CodeProps {
+  node?: any;
+  className?: string;
+  children?: React.ReactNode;
+  [key: string]: any;
+}
 
 export default function Response() {
   const responseChunks = useInterviewStore((s) => s.responseChunks);
@@ -15,6 +25,9 @@ export default function Response() {
       await navigator.clipboard.writeText(fullText);
     }
   };
+
+  // Append a blinking cursor character to the text while streaming
+  const textToRender = status === "responding" ? `${fullText}▎` : fullText;
 
   return (
     <div className="px-3 pb-2 flex-1 flex flex-col min-h-0">
@@ -35,7 +48,7 @@ export default function Response() {
             onClick={handleCopy}
             className="flex items-center gap-1 text-[10px] text-white/40 hover:text-white/70 transition-colors cursor-pointer"
           >
-            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <rect x="9" y="9" width="13" height="13" rx="2" />
               <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
             </svg>
@@ -54,12 +67,31 @@ export default function Response() {
             <span className="text-xs">{t("generatingResponse")}</span>
           </div>
         ) : hasContent ? (
-          <p className="text-green-400 text-sm leading-relaxed">
-            {fullText}
-            {status === "responding" && (
-              <span className="inline-block w-1 h-4 bg-green-400/60 ml-0.5 animate-pulse align-text-bottom" />
-            )}
-          </p>
+          <div className="text-green-400 text-sm leading-relaxed prose prose-invert max-w-none">
+            <ReactMarkdown
+              components={{
+                code({ className, children, ...props }: CodeProps) {
+                  const match = /language-(\w+)/.exec(className || "");
+                  return match ? (
+                    <SyntaxHighlighter
+                      style={vscDarkPlus}
+                      language={match[1]}
+                      PreTag="div"
+                      {...props}
+                    >
+                      {String(children).replace(/\n$/, "")}
+                    </SyntaxHighlighter>
+                  ) : (
+                    <code className={className} {...props}>
+                      {children}
+                    </code>
+                  );
+                },
+              }}
+            >
+              {textToRender}
+            </ReactMarkdown>
+          </div>
         ) : (
           <p className="text-[14px] text-white/20 italic text-sm text-center py-4">
             {t("placeholderResponse")}

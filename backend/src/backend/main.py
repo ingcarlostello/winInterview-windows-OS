@@ -86,6 +86,7 @@ async def set_prompt(req: PromptRequest):
     if not req.prompt.strip():
         return {"success": False, "error": "Prompt cannot be empty"}
     success = save_custom_prompt(req.language, req.prompt)
+    logger.info("Prompt saved - language=%s, prompt='%s'", req.language, req.prompt)
     return {"success": success}
 
 
@@ -94,6 +95,7 @@ async def clear_prompt(language: str = "es"):
     if language not in ("es", "en"):
         language = "es"
     delete_custom_prompt(language)
+    logger.info("Prompt deleted - language=%s", language)
     return {"success": True}
 
 
@@ -289,10 +291,12 @@ async def websocket_endpoint(websocket: WebSocket):
                 if custom_prompt.strip():
                     save_custom_prompt(session_language, custom_prompt)
                     conversation_history[0]["content"] = custom_prompt.strip()
+                    logger.info("WebSocket prompt saved - session=%s, language=%s, prompt='%s'", session_id, session_language, custom_prompt.strip())
                     await ws_manager.send_status(session_id, "prompt_saved")
             elif msg == "clear_prompt":
                 delete_custom_prompt(session_language)
                 conversation_history[0]["content"] = get_system_prompt(session_language)
+                logger.info("WebSocket prompt cleared - session=%s, language=%s", session_id, session_language)
                 await ws_manager.send_status(session_id, "prompt_cleared")
     except (WebSocketDisconnect, ConnectionClosed, RuntimeError):
         logger.info("Client disconnected: %s", session_id)
