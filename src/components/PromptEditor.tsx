@@ -15,7 +15,7 @@ export default function PromptEditor({ onSave, onRestore }: PromptEditorProps) {
   const showPromptEditor = useInterviewStore((s) => s.showPromptEditor);
   const togglePromptEditor = useInterviewStore((s) => s.togglePromptEditor);
 
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft] = useState(() => customPrompts[language] || "");
   const [saved, setSaved] = useState(false);
   const [restored, setRestored] = useState(false);
   const prevLangRef = useRef(language);
@@ -63,6 +63,11 @@ export default function PromptEditor({ onSave, onRestore }: PromptEditorProps) {
         <span className="text-[10px] uppercase tracking-wider text-white/40 flex items-center gap-1.5">
           <Sliders size={11} />
           {t("customContext")}
+          {customPrompts[language]?.trim() && (
+            <span className="text-[9px] text-green-400/70 ml-1">
+              {t("activePromptIndicator")}
+            </span>
+          )}
         </span>
         <button
           type="button"
@@ -72,7 +77,9 @@ export default function PromptEditor({ onSave, onRestore }: PromptEditorProps) {
           <X size={12} />
         </button>
       </div>
-      <div className="bg-white/5 border border-white/10 rounded-lg p-2">
+      <div className={`bg-white/5 border rounded-lg p-2 transition-colors ${
+        customPrompts[language]?.trim() ? "border-green-500/30" : "border-white/10"
+      }`}>
         <textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value)}

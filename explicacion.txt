@@ -1,0 +1,33 @@
+The "invisible overlay" trick is fascinating because it doesn't require hacking Zoom or Meet; instead, it leverages how operating systems and screen capture APIs handle windows.
+
+To make a window perfectly visible to you but completely invisible to anyone viewing your shared screen or recording, several operating system (OS) and desktop development techniques are combined:
+
+1. OS Screen Capture Exclusion (The Technical Core)
+Both Windows and macOS have native flags in their windowing APIs originally designed for security and privacy reasons (for example, to prevent screen recording software from capturing your Bitwarden or Netflix window).
+
+On Windows (Win32/C++/C#): The SetWindowDisplayAffinity user API function is used. By passing the WDA_EXCLUDEFROMCAPTURE parameter, the operating system renders the window on your monitor. However, if any other application (such as Zoom or Discord) requests a screenshot of that area of ​​the screen through standard APIs (BitBlt, Desktop Duplication API), the OS delivers that empty or transparent region.
+
+On macOS (Cocoa/Swift): The sharingType property of the NSWindow class is used, setting it to NSWindowSharingNone. This tells the system that the window should not be included in screenshots or ScreenCaptureKit API streams.
+
+If the app is built on a cross-platform framework like Electron or Tauri, these tools already expose wrapped methods (such as browserWindow.setContentProtection(true) in Electron) that enable these native functions behind the scenes.
+
+2. Click-Through Behavior and Translucency
+To make it act as a true HUD (Heads-Up Display) or floating widget that doesn't obstruct your workflow (for example, if you need to click on something that's "behind" the AI ​​text):
+
+Extended window styles are configured (on Windows, WS_EX_TRANSPARENT and WS_EX_LAYERED). This makes the window invisible to mouse clicks; the pointer passes through it and clicks on the background application (such as your browser or IDE).
+
+The frame and close/minimize buttons are removed, and the window is forced to always be on top.
+
+3. Avoiding Browser Injection (Zero Extensions)
+Older transcription tools used Chrome extensions. The problem with extensions is that they modify the web page's DOM. If you're sharing the browser tab or window, any HTML element injected by an extension will be visible in the video call.
+
+Because it's a native, standalone desktop application that floats on top of everything else, the video calling software has no idea that anything is covering it, because the OS takes care of censoring that specific layer before sending the video frames to Zoom.
+
+How could it be detected?
+Although it's invisible to screen-capturing software, it's not 100% foolproof in all scenarios:
+
+External camera: If someone is recording you with a mobile phone directly on the physical monitor, the window will be perfectly visible, since the monitor is indeed emitting those pixels.
+
+Reflection in eyes/glasses: In very high-security environments, changes in brightness or text reflected in the user's glasses can give them away.
+
+Process signatures: Proctoring systems (the software used to monitor online exams) or anti-cheat systems in video games don't just capture the screen; They analyze the active processes in the operating system. They would detect an app running in the background that has the content protection flag enabled or that is consuming accessibility/audio APIs.

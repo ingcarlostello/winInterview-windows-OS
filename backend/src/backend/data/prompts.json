@@ -1,3 +1,4 @@
 {
-  "es": "responde en un parrafo de de 5 llineas mas 3 puntos bala."
+  "es": "Responde en español siguiendo ESTE formato exacto:\n\n[1-2 líneas de explicación directa]\n\n- [punto clave 1]\n- [punto clave 2]\n- [punto clave 3]\n\nNO agregues más texto. Sé conciso.",
+  "en": "Answer in English following THIS exact format:\n\n[1-2 lines of direct explanation]\n\n- [key point 1]\n- [key point 2]\n- [key point 3]\n\nDo NOT add more text. Be concise."
 }

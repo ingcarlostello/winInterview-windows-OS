@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 import threading
 import uuid
@@ -26,6 +27,13 @@ from backend.llm.prompt import get_system_prompt, save_custom_prompt, delete_cus
 from backend.ws_manager import ConnectionManager
 
 load_dotenv()
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Interview Responder Backend")
 
@@ -110,6 +118,8 @@ async def websocket_endpoint(websocket: WebSocket):
     conversation_history: list[dict[str, str]] = [
         {"role": "system", "content": get_system_prompt(session_language)}
     ]
+    logger.info(f"Session {session_id} initialized with language '{session_language}'")
+    logger.info(f"System prompt for session: {conversation_history[0]['content'][:150]}...")
 
     nvidia_client = AsyncOpenAI(
         base_url="https://integrate.api.nvidia.com/v1",
@@ -119,6 +129,9 @@ async def websocket_endpoint(websocket: WebSocket):
     async def stream_nvidia_response(user_message: str, sid: str) -> None:
         conversation_history.append({"role": "user", "content": user_message})
         await ws_manager.send_status(sid, "thinking")
+
+        logger.info(f"Sending to NVIDIA model. System prompt: {conversation_history[0]['content'][:150]}...")
+        logger.info(f"User message: {user_message[:100]}...")
 
         response_text = ""
         first_chunk = True
@@ -276,8 +289,10 @@ async def websocket_endpoint(websocket: WebSocket):
             elif msg.startswith("set_prompt:"):
                 custom_prompt = msg[len("set_prompt:"):]
                 if custom_prompt.strip():
+                    logger.info(f"Received set_prompt for session {session_id}: {custom_prompt.strip()[:100]}...")
                     save_custom_prompt(session_language, custom_prompt)
                     conversation_history[0]["content"] = custom_prompt.strip()
+                    logger.info(f"Updated conversation_history[0] with custom prompt")
                     await ws_manager.send_status(session_id, "prompt_saved")
             elif msg == "clear_prompt":
                 delete_custom_prompt(session_language)
