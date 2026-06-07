@@ -26,6 +26,8 @@ interface InterviewState {
   questionsAnswered: number;
   customPrompts: CustomPrompts;
   showPromptEditor: boolean;
+  ghostMode: boolean;
+  contentProtected: boolean;
 
   setStatus: (status: Status) => void;
   setLanguage: (language: Language) => void;
@@ -41,6 +43,8 @@ interface InterviewState {
   getCustomPrompt: () => string;
   hasCustomPrompt: () => boolean;
   togglePromptEditor: () => void;
+  setGhostMode: (on: boolean) => void;
+  setContentProtected: (on: boolean) => void;
 }
 
 export const useInterviewStore = create<InterviewState>()(
@@ -54,6 +58,8 @@ export const useInterviewStore = create<InterviewState>()(
       questionsAnswered: 0,
       customPrompts: { es: "", en: "" },
       showPromptEditor: false,
+      ghostMode: false,
+      contentProtected: true,
 
       setStatus: (status) => set({ status }),
 
@@ -106,6 +112,9 @@ export const useInterviewStore = create<InterviewState>()(
 
       togglePromptEditor: () =>
         set((state) => ({ showPromptEditor: !state.showPromptEditor })),
+
+      setGhostMode: (on) => set({ ghostMode: on }),
+      setContentProtected: (on) => set({ contentProtected: on }),
     }),
     {
       name: "interview-settings",

@@ -8,6 +8,8 @@
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",
+    "core:window:allow-set-content-protected",
+    "core:window:allow-set-ignore-cursor-events",
     "global-shortcut:default"
   ]
 }

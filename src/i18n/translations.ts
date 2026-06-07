@@ -27,7 +27,11 @@ export type TranslationKey =
   | "promptSaved"
   | "promptRestored"
   | "btnTogglePrompt"
-  | "activePromptIndicator";
+  | "activePromptIndicator"
+  | "ghostModeOn"
+  | "ghostModeOff"
+  | "contentProtected"
+  | "contentUnprotected";
 
 const translations: Record<Language, Record<TranslationKey, string>> = {
   es: {
@@ -58,6 +62,10 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     promptRestored: "Prompt restaurado",
     btnTogglePrompt: "Editar prompt",
     activePromptIndicator: "✓ Prompt activo",
+    ghostModeOn: "👻 Ghost",
+    ghostModeOff: "Ghost off",
+    contentProtected: "🛡 Protegido",
+    contentUnprotected: "Sin protección",
   },
   en: {
     statusDisconnected: "Disconnected",
@@ -87,6 +95,10 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     promptRestored: "Prompt restored",
     btnTogglePrompt: "Edit prompt",
     activePromptIndicator: "✓ Active prompt",
+    ghostModeOn: "👻 Ghost",
+    ghostModeOff: "Ghost off",
+    contentProtected: "🛡 Protected",
+    contentUnprotected: "Unprotected",
   },
 };
 

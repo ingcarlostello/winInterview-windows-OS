@@ -1,4 +1,5 @@
-import { Mic, Pause, Play, Square } from "lucide-react";
+import { Mic, Pause, Play, Square, Shield, ShieldOff } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
 import { useInterviewStore } from "../stores/interview";
 import { useTranslation } from "../hooks/useTranslation";
 
@@ -16,10 +17,17 @@ export default function Controls({
   onDisconnect,
 }: ControlsProps) {
   const status = useInterviewStore((s) => s.status);
+  const contentProtected = useInterviewStore((s) => s.contentProtected);
+  const setContentProtected = useInterviewStore((s) => s.setContentProtected);
   const { t } = useTranslation();
   const isPaused = status === "paused";
   const isActive =
     status === "listening" || status === "thinking" || status === "responding";
+
+  const handleToggleProtection = async () => {
+    const newState = await invoke<boolean>("toggle_content_protected");
+    setContentProtected(newState);
+  };
 
   return (
     <div className="flex items-center justify-between px-3 pb-2">
@@ -93,6 +101,18 @@ export default function Controls({
           −
         </button>
       )}
+      <button
+        type="button"
+        onClick={handleToggleProtection}
+        className={`flex items-center justify-center w-6 h-6 rounded-full transition-colors cursor-pointer ${
+          contentProtected
+            ? "bg-green-500/20 text-green-400 hover:bg-green-500/30"
+            : "bg-red-500/20 text-red-400 hover:bg-red-500/30"
+        }`}
+        title={contentProtected ? t("contentProtected") : t("contentUnprotected")}
+      >
+        {contentProtected ? <Shield size={12} /> : <ShieldOff size={12} />}
+      </button>
     </div>
   );
 }

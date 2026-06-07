@@ -1,3 +1,5 @@
+import { useEffect } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { useInterviewStore } from "../stores/interview";
 import StatusBar from "./StatusBar";
 import Transcription from "./Transcription";
@@ -24,10 +26,33 @@ export default function Overlay({
   onRestorePrompt,
 }: OverlayProps) {
   const status = useInterviewStore((s) => s.status);
+  const ghostMode = useInterviewStore((s) => s.ghostMode);
+  const setGhostMode = useInterviewStore((s) => s.setGhostMode);
+  const setContentProtected = useInterviewStore((s) => s.setContentProtected);
   const isActive = status === "listening" || status === "thinking" || status === "responding";
 
+  // Listen for Tauri events from the Rust layer
+  useEffect(() => {
+    const unlistenGhost = listen<boolean>("ghost-mode-changed", (event) => {
+      setGhostMode(event.payload);
+    });
+    const unlistenProtect = listen<boolean>("content-protected-changed", (event) => {
+      setContentProtected(event.payload);
+    });
+    return () => {
+      unlistenGhost.then((fn) => fn());
+      unlistenProtect.then((fn) => fn());
+    };
+  }, [setGhostMode, setContentProtected]);
+
+  const borderClass = ghostMode
+    ? "border-cyan-400/50"
+    : isActive
+      ? "border-green-500/30"
+      : "border-white/10";
+
   return (
-    <div className={`h-full w-full flex flex-col bg-black/60 backdrop-blur-xl rounded-2xl border border-white/10 shadow-2xl transition-shadow duration-500 ${isActive ? "aura-active border-green-500/30" : ""}`}>
+    <div className={`h-full w-full flex flex-col bg-black/60 backdrop-blur-xl rounded-2xl border shadow-2xl transition-all duration-500 ${borderClass} ${isActive ? "aura-active" : ""} ${ghostMode ? "ghost-active" : ""}`}>
       <StatusBar />
       <div className="border-b border-white/10" />
       <Controls onPause={onPause} onResume={onResume} onConnect={onConnect} onDisconnect={onDisconnect} />
@@ -41,3 +66,4 @@ export default function Overlay({
     </div>
   );
 }
+
