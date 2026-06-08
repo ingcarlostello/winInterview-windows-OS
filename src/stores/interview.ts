@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 export type Language = "es" | "en";
+export type Theme = "dark" | "liquid";
 
 export type Status =
   | "idle"
@@ -28,6 +29,7 @@ interface InterviewState {
   showPromptEditor: boolean;
   ghostMode: boolean;
   contentProtected: boolean;
+  theme: Theme;
 
   setStatus: (status: Status) => void;
   setLanguage: (language: Language) => void;
@@ -45,6 +47,7 @@ interface InterviewState {
   togglePromptEditor: () => void;
   setGhostMode: (on: boolean) => void;
   setContentProtected: (on: boolean) => void;
+  setTheme: (theme: Theme) => void;
 }
 
 export const useInterviewStore = create<InterviewState>()(
@@ -60,6 +63,7 @@ export const useInterviewStore = create<InterviewState>()(
       showPromptEditor: false,
       ghostMode: false,
       contentProtected: true,
+      theme: "dark",
 
       setStatus: (status) => set({ status }),
 
@@ -115,12 +119,14 @@ export const useInterviewStore = create<InterviewState>()(
 
       setGhostMode: (on) => set({ ghostMode: on }),
       setContentProtected: (on) => set({ contentProtected: on }),
+      setTheme: (theme) => set({ theme }),
     }),
     {
       name: "interview-settings",
       partialize: (state) => ({
         customPrompts: state.customPrompts,
         language: state.language,
+        theme: state.theme,
       }),
     },
   ),

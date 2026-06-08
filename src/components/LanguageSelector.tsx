@@ -21,6 +21,7 @@ interface LanguageSelectorProps {
 export default function LanguageSelector({ disabled = false }: LanguageSelectorProps) {
   const language = useInterviewStore((s) => s.language);
   const setLanguage = useInterviewStore((s) => s.setLanguage);
+  const theme = useInterviewStore((s) => s.theme);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -50,10 +51,12 @@ export default function LanguageSelector({ disabled = false }: LanguageSelectorP
         type="button"
         onClick={() => !buttonDisabled && setOpen(!open)}
         disabled={buttonDisabled}
-        className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg border transition-colors cursor-pointer ${
+        className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg transition-colors ${
           buttonDisabled
-            ? "border-white/5 bg-white/5 text-white/30 cursor-not-allowed"
-            : "border-white/15 bg-white/5 text-white/70 hover:bg-white/10 hover:text-white"
+            ? "border border-white/5 bg-white/5 text-white/30 cursor-not-allowed"
+            : theme === "liquid"
+              ? "glass-button"
+              : "border border-white/15 bg-white/5 text-white/70 hover:bg-white/10 hover:text-white cursor-pointer"
         }`}
       >
         <span className="text-sm leading-none">{current.flag}</span>

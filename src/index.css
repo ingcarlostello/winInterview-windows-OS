@@ -25,6 +25,36 @@
   box-shadow: 0 0 20px rgb(34 197 94 / 0.15), 0 0 40px rgb(34 197 94 / 0.1), inset 0 0 20px rgb(34 197 94 / 0.05);
 }
 
+@utility liquid-aura-active {
+  box-shadow: 0 0 25px rgb(34 197 94 / 0.4), 0 0 50px rgb(34 197 94 / 0.2), inset 0 0 15px rgb(34 197 94 / 0.2);
+}
+
+@utility liquid-idle-aura {
+  box-shadow: rgba(120, 160, 255, 0.2) 0px 8px 48px -8px, rgba(255, 255, 255, 0.06) 0px 2px 16px;
+}
+
+@utility glass-base {
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(20px) saturate(120%);
+  -webkit-backdrop-filter: blur(20px) saturate(120%);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+@utility glass-button {
+  background: rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.25);
+    transform: scale(1.05);
+  }
+}
+
 @utility icon-spin {
   animation: spin-slow 3s linear infinite;
 }
