@@ -14,6 +14,7 @@ export default function PromptEditor({ onSave, onRestore }: PromptEditorProps) {
   const customPrompts = useInterviewStore((s) => s.customPrompts);
   const showPromptEditor = useInterviewStore((s) => s.showPromptEditor);
   const togglePromptEditor = useInterviewStore((s) => s.togglePromptEditor);
+  const theme = useInterviewStore((s) => s.theme);
 
   const [draft, setDraft] = useState(() => customPrompts[language] || "");
   const [saved, setSaved] = useState(false);
@@ -48,7 +49,11 @@ export default function PromptEditor({ onSave, onRestore }: PromptEditorProps) {
         <button
           type="button"
           onClick={togglePromptEditor}
-          className="flex items-center gap-1.5 px-2 py-1 text-[10px] uppercase tracking-wider text-white/40 hover:text-white/70 transition-colors cursor-pointer"
+          className={`flex items-center gap-1.5 transition-colors cursor-pointer ${
+            theme === "liquid"
+              ? "glass-button px-2.5 py-1 rounded-full text-xs font-medium"
+              : "px-2 py-1 text-[10px] uppercase tracking-wider text-white/40 hover:text-white/70"
+          }`}
         >
           <Sliders size={11} />
           {t("btnTogglePrompt")}
@@ -92,9 +97,11 @@ export default function PromptEditor({ onSave, onRestore }: PromptEditorProps) {
             onClick={handleSave}
             disabled={!draft.trim()}
             className={`flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded transition-colors cursor-pointer ${
-              saved
-                ? "bg-green-500/30 text-green-400"
-                : "bg-green-500/20 border border-green-500/30 text-green-400 hover:bg-green-500/40 disabled:opacity-40 disabled:cursor-not-allowed"
+              theme === "liquid"
+                ? "glass-button disabled:opacity-40 disabled:cursor-not-allowed"
+                : saved
+                  ? "bg-green-500/30 text-green-400"
+                  : "bg-green-500/20 border border-green-500/30 text-green-400 hover:bg-green-500/40 disabled:opacity-40 disabled:cursor-not-allowed"
             }`}
           >
             <Check size={10} />
@@ -103,8 +110,12 @@ export default function PromptEditor({ onSave, onRestore }: PromptEditorProps) {
           <button
             type="button"
             onClick={handleRestore}
-            className={`flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded border border-white/10 text-white/50 hover:text-white/70 hover:bg-white/10 transition-colors cursor-pointer ${
-              restored ? "bg-white/10 text-white/70" : ""
+            className={`flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded transition-colors cursor-pointer ${
+              theme === "liquid"
+                ? "glass-button"
+                : restored 
+                  ? "bg-white/10 text-white/70 border border-white/10" 
+                  : "border border-white/10 text-white/50 hover:text-white/70 hover:bg-white/10"
             }`}
           >
             <RotateCcw size={10} />

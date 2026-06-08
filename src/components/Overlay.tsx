@@ -29,6 +29,7 @@ export default function Overlay({
   const ghostMode = useInterviewStore((s) => s.ghostMode);
   const setGhostMode = useInterviewStore((s) => s.setGhostMode);
   const setContentProtected = useInterviewStore((s) => s.setContentProtected);
+  const theme = useInterviewStore((s) => s.theme);
   const isActive = status === "listening" || status === "thinking" || status === "responding";
 
   // Listen for Tauri events from the Rust layer
@@ -45,14 +46,22 @@ export default function Overlay({
     };
   }, [setGhostMode, setContentProtected]);
 
+  const isLiquid = theme === "liquid";
+
+  const bgClass = isLiquid ? "glass-base" : "bg-black/60 backdrop-blur-xl";
+  
   const borderClass = ghostMode
     ? "border-cyan-400/50"
-    : isActive
-      ? "border-green-500/30"
-      : "border-white/10";
+    : isLiquid 
+      ? (isActive ? "border-green-400/60" : "")
+      : (isActive ? "border-green-500/30" : "border-white/10");
+
+  const auraClass = isActive 
+    ? (isLiquid ? "liquid-aura-active" : "aura-active") 
+    : (isLiquid && !ghostMode ? "liquid-idle-aura" : "");
 
   return (
-    <div className={`h-full w-full flex flex-col bg-black/60 backdrop-blur-xl rounded-2xl border shadow-2xl transition-all duration-500 ${borderClass} ${isActive ? "aura-active" : ""} ${ghostMode ? "ghost-active" : ""}`}>
+    <div className={`shadow-[0px_8px_48px_-8px_rgba(120,160,255,0.2),0px_2px_16px_rgba(255,255,255,0.06)] h-full w-full flex flex-col ${bgClass} rounded-2xl border shadow-2xl transition-all duration-500 ${borderClass} ${auraClass} ${ghostMode ? "ghost-active" : ""}`}>
       <StatusBar />
       <div className="border-b border-white/10" />
       <Controls onPause={onPause} onResume={onResume} onConnect={onConnect} onDisconnect={onDisconnect} />

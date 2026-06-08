@@ -64,8 +64,8 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     activePromptIndicator: "✓ Prompt activo",
     ghostModeOn: "👻 Ghost",
     ghostModeOff: "Ghost off",
-    contentProtected: "🛡 Protegido",
-    contentUnprotected: "Sin protección",
+    contentProtected: "Invisible",
+    contentUnprotected: "Visible",
   },
   en: {
     statusDisconnected: "Disconnected",
@@ -97,8 +97,8 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     activePromptIndicator: "✓ Active prompt",
     ghostModeOn: "👻 Ghost",
     ghostModeOff: "Ghost off",
-    contentProtected: "🛡 Protected",
-    contentUnprotected: "Unprotected",
+    contentProtected: "Invisible",
+    contentUnprotected: "Visible",
   },
 };
 

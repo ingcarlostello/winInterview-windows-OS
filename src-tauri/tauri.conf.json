@@ -14,7 +14,7 @@
     "windows": [
       {
         "title": "Interview Copilot",
-        "width": 420,
+        "width": 730,
         "height": 520,
         "resizable": true,
         "fullscreen": false,
