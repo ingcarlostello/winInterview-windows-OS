@@ -11,10 +11,15 @@ const statusConfig: Record<Status, { labelKey: string; color: string; pulse: boo
   thinking: { labelKey: "statusThinking", color: "bg-green-500", pulse: true, showMic: true },
   responding: { labelKey: "statusResponding", color: "bg-green-500", pulse: false, showMic: true },
   paused: { labelKey: "statusPaused", color: "bg-orange-500", pulse: false, showMic: false },
+  reconnecting: { labelKey: "statusReconnecting", color: "bg-yellow-500", pulse: true, showMic: false },
   error: { labelKey: "statusDisconnected", color: "bg-red-500", pulse: false, showMic: false },
 };
 
-export default function StatusBar() {
+interface StatusBarProps {
+  onChangeLanguage?: (language: string) => void;
+}
+
+export default function StatusBar({ onChangeLanguage }: StatusBarProps) {
   const status = useInterviewStore((s) => s.status);
   const error = useInterviewStore((s) => s.error);
   const ghostMode = useInterviewStore((s) => s.ghostMode);
@@ -22,8 +27,6 @@ export default function StatusBar() {
   const theme = useInterviewStore((s) => s.theme);
   const config = statusConfig[status];
   const { t } = useTranslation();
-
-  const isDisabled = status !== "idle" && status !== "error";
 
   return (
     <div data-tauri-drag-region className="flex items-center justify-between px-3 py-2.5 w-full gap-2">
@@ -50,7 +53,7 @@ export default function StatusBar() {
           </span>
         </button>
       </div>
-      <LanguageSelector disabled={isDisabled} />
+      <LanguageSelector onChangeLanguage={onChangeLanguage} />
       <div className="flex items-center gap-1.5 shrink-0">
         {/* Stealth indicators */}
         {ghostMode && (

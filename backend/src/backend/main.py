@@ -60,6 +60,7 @@ def build_agent_settings(language: str = "es") -> AgentV1Settings:
                     model="nova-3",
                     language=language,
                     smart_format=True,
+                    endpointing=1500,
                 )
             ),
         ),
@@ -109,16 +110,16 @@ async def websocket_endpoint(websocket: WebSocket):
 
     loop = asyncio.get_running_loop()
     agent_ready = threading.Event()
-    agent_conn: object = None
-    agent_ctx: object = None
-    session_language: str = websocket.query_params.get("lang", "es")
-    if session_language not in ("es", "en"):
-        session_language = "es"
+    agent_conn: list[object] = [None]
+    agent_ctx: list[object] = [None]
+    session_language: list[str] = [websocket.query_params.get("lang", "es")]
+    if session_language[0] not in ("es", "en"):
+        session_language[0] = "es"
 
     conversation_history: list[dict[str, str]] = [
-        {"role": "system", "content": get_system_prompt(session_language)}
+        {"role": "system", "content": get_system_prompt(session_language[0])}
     ]
-    logger.info(f"Session {session_id} initialized with language '{session_language}'")
+    logger.info(f"Session {session_id} initialized with language '{session_language[0]}'")
     logger.info(f"System prompt for session: {conversation_history[0]['content'][:150]}...")
 
     nvidia_client = AsyncOpenAI(
@@ -138,11 +139,13 @@ async def websocket_endpoint(websocket: WebSocket):
 
         try:
             completion = await nvidia_client.chat.completions.create(
-                model="openai/gpt-oss-20b",
+                model="google/gemma-3n-e4b-it",
                 messages=conversation_history,
-                temperature=1,
-                top_p=1,
-                max_tokens=4096,
+                temperature=0.20,
+                top_p=0.70,
+                max_tokens=512,
+                frequency_penalty=0.00,
+                presence_penalty=0.00,
                 stream=True,
             )
             async for chunk in completion:
@@ -192,34 +195,68 @@ async def websocket_endpoint(websocket: WebSocket):
         await ws_manager.send_transcription(sid, text)
         await stream_nvidia_response(text, sid)
 
-    def _agent_thread() -> None:
-        nonlocal agent_conn, agent_ctx
+    def _start_agent_thread() -> None:
         api_key = os.getenv("DEEPGRAM_API_KEY")
         if not api_key:
             return
 
         client = DeepgramClient(api_key=api_key)
-        agent_ctx = client.agent.v1.connect()
-        agent_conn = agent_ctx.__enter__()
+        ctx = client.agent.v1.connect()
+        conn = ctx.__enter__()
+        agent_ctx[0] = ctx
+        agent_conn[0] = conn
 
-        agent_conn.on(EventType.OPEN, lambda _: None)
-        agent_conn.on(EventType.MESSAGE, on_agent_message)
-        agent_conn.on(EventType.CLOSE, lambda _: None)
-        agent_conn.on(EventType.ERROR, lambda e: None)
+        conn.on(EventType.OPEN, lambda _: None)
+        conn.on(EventType.MESSAGE, on_agent_message)
+        conn.on(EventType.CLOSE, lambda _: None)
+        conn.on(EventType.ERROR, lambda e: None)
 
         try:
-            agent_conn.send_settings(build_agent_settings(session_language))
-            agent_conn.start_listening()
+            conn.send_settings(build_agent_settings(session_language[0]))
+            conn.start_listening()
         except Exception:
-            pass
-        finally:
-            agent_conn = None
+            agent_conn[0] = None
             try:
-                agent_ctx.__exit__(None, None, None)
+                ctx.__exit__(None, None, None)
             except Exception:
                 pass
 
-    agent_thread = threading.Thread(target=_agent_thread, daemon=True)
+    async def _restart_agent(new_language: str) -> None:
+        nonlocal is_paused
+
+        await ws_manager.send_status(session_id, "reconnecting")
+
+        await audio_capture.stop()
+
+        ctx = agent_ctx[0]
+        if ctx:
+            try:
+                ctx.__exit__(None, None, None)
+            except Exception:
+                pass
+        agent_conn[0] = None
+        agent_ctx[0] = None
+
+        session_language[0] = new_language
+        conversation_history.clear()
+        conversation_history.append({"role": "system", "content": get_system_prompt(new_language)})
+
+        agent_ready.clear()
+        thread = threading.Thread(target=_start_agent_thread, daemon=True)
+        thread.start()
+
+        if not agent_ready.wait(timeout=15):
+            await ws_manager.send_error(session_id, "Agent reconnection timeout")
+            return
+
+        audio_capture.set_handlers(on_audio_frame=on_audio)
+        is_paused = False
+        await audio_capture.start()
+        await ws_manager.send_status(session_id, "listening")
+
+        logger.info(f"Session {session_id} restarted agent with language '{new_language}'")
+
+    agent_thread = threading.Thread(target=_start_agent_thread, daemon=True)
     agent_thread.start()
 
     if not agent_ready.wait(timeout=15):
@@ -229,7 +266,7 @@ async def websocket_endpoint(websocket: WebSocket):
     audio_capture = AudioCapture()
 
     def on_audio(frame: bytes) -> None:
-        conn = agent_conn
+        conn = agent_conn[0]
         if conn:
             try:
                 conn.send_media(frame)
@@ -246,20 +283,20 @@ async def websocket_endpoint(websocket: WebSocket):
     async def keepalive_loop():
         silent_frame = b'\x00' * 1600
         while True:
-            if is_paused and agent_conn:
+            if is_paused and agent_conn[0]:
                 try:
                     def _send_ka():
-                        if not agent_conn:
+                        if not agent_conn[0]:
                             return
                         try:
-                            if hasattr(agent_conn, "keep_alive"):
-                                agent_conn.keep_alive()
-                            elif hasattr(agent_conn, "send_keep_alive"):
-                                agent_conn.send_keep_alive()
+                            if hasattr(agent_conn[0], "keep_alive"):
+                                agent_conn[0].keep_alive()
+                            elif hasattr(agent_conn[0], "send_keep_alive"):
+                                agent_conn[0].send_keep_alive()
                         except Exception:
                             pass
                         try:
-                            agent_conn.send_media(silent_frame)
+                            agent_conn[0].send_media(silent_frame)
                         except Exception:
                             pass
 
@@ -282,22 +319,26 @@ async def websocket_endpoint(websocket: WebSocket):
                 await audio_capture.start()
                 await ws_manager.send_status(session_id, "listening")
             elif msg == "clear":
-                conversation_history = [
-                    {"role": "system", "content": get_system_prompt(session_language)}
-                ]
+                conversation_history.clear()
+                conversation_history.append({"role": "system", "content": get_system_prompt(session_language[0])})
                 await ws_manager.send_status(session_id, "cleared")
             elif msg.startswith("set_prompt:"):
                 custom_prompt = msg[len("set_prompt:"):]
                 if custom_prompt.strip():
                     logger.info(f"Received set_prompt for session {session_id}: {custom_prompt.strip()[:100]}...")
-                    save_custom_prompt(session_language, custom_prompt)
+                    save_custom_prompt(session_language[0], custom_prompt)
                     conversation_history[0]["content"] = custom_prompt.strip()
                     logger.info(f"Updated conversation_history[0] with custom prompt")
                     await ws_manager.send_status(session_id, "prompt_saved")
             elif msg == "clear_prompt":
-                delete_custom_prompt(session_language)
-                conversation_history[0]["content"] = get_system_prompt(session_language)
+                logger.info(f"Received clear_prompt for session {session_id}")
+                delete_custom_prompt(session_language[0])
+                conversation_history[0]["content"] = get_system_prompt(session_language[0])
                 await ws_manager.send_status(session_id, "prompt_cleared")
+            elif msg.startswith("set_language:"):
+                new_lang = msg[len("set_language:"):]
+                if new_lang in ("es", "en") and new_lang != session_language[0]:
+                    await _restart_agent(new_lang)
     except (WebSocketDisconnect, ConnectionClosed, RuntimeError):
         pass
     finally:
@@ -305,7 +346,7 @@ async def websocket_endpoint(websocket: WebSocket):
             ka_task.cancel()
         await audio_capture.stop()
         audio_capture.close()
-        ctx = agent_ctx
+        ctx = agent_ctx[0]
         if ctx:
             try:
                 ctx.__exit__(None, None, None)

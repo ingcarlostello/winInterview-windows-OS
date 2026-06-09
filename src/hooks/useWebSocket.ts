@@ -58,6 +58,10 @@ export function useWebSocket() {
 
     ws.onopen = () => {
       setStatus("connected");
+      const customPrompt = useInterviewStore.getState().getCustomPrompt();
+      if (customPrompt.trim()) {
+        ws.send(`set_prompt:${customPrompt}`);
+      }
     };
 
     ws.onmessage = (event) => {
@@ -73,12 +77,17 @@ export function useWebSocket() {
               break;
             }
 
+            if (rawStatus === "prompt_saved" || rawStatus === "prompt_cleared") {
+              break;
+            }
+
             const statusMap: Record<string, Status> = {
               connected: "connected",
               listening: "listening",
               thinking: "thinking",
               responding: "responding",
               paused: "paused",
+              reconnecting: "reconnecting",
             };
             const status = statusMap[rawStatus] || "idle";
 
@@ -147,21 +156,31 @@ export function useWebSocket() {
 
   const send = useCallback((command: string) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
+      console.log(`[WS] Sending: ${command}`);
       wsRef.current.send(command);
+    } else {
+      console.warn(`[WS] Cannot send "${command}" - WebSocket not open (state: ${wsRef.current?.readyState})`);
     }
   }, []);
 
   const setPrompt = useCallback((prompt: string) => {
+    console.log("[WS] setPrompt called with:", prompt.substring(0, 50) + "...");
     send(`set_prompt:${prompt}`);
     const language = useInterviewStore.getState().language;
     useInterviewStore.getState().setCustomPrompt(language, prompt);
   }, [send]);
 
   const restoreDefaultPrompt = useCallback(() => {
+    console.log("[WS] restoreDefaultPrompt called");
     send("clear_prompt");
     const language = useInterviewStore.getState().language;
     useInterviewStore.getState().clearCustomPrompt(language);
+    console.log("[WS] Zustand store cleared for language:", language);
   }, [send]);
 
-  return { send, disconnect, connect, setPrompt, restoreDefaultPrompt };
+  const changeLanguage = useCallback((language: string) => {
+    send(`set_language:${language}`);
+  }, [send]);
+
+  return { send, disconnect, connect, setPrompt, restoreDefaultPrompt, changeLanguage };
 }

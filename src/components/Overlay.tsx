@@ -15,6 +15,7 @@ interface OverlayProps {
   onDisconnect: () => void;
   onSavePrompt: (prompt: string) => void;
   onRestorePrompt: () => void;
+  onChangeLanguage: (language: string) => void;
 }
 
 export default function Overlay({
@@ -24,6 +25,7 @@ export default function Overlay({
   onDisconnect,
   onSavePrompt,
   onRestorePrompt,
+  onChangeLanguage,
 }: OverlayProps) {
   const status = useInterviewStore((s) => s.status);
   const ghostMode = useInterviewStore((s) => s.ghostMode);
@@ -62,7 +64,7 @@ export default function Overlay({
 
   return (
     <div className={`shadow-[0px_8px_48px_-8px_rgba(120,160,255,0.2),0px_2px_16px_rgba(255,255,255,0.06)] h-full w-full flex flex-col ${bgClass} rounded-2xl border shadow-2xl transition-all duration-500 ${borderClass} ${auraClass} ${ghostMode ? "ghost-active" : ""}`}>
-      <StatusBar />
+      <StatusBar onChangeLanguage={onChangeLanguage} />
       <div className="border-b border-white/10" />
       <Controls onPause={onPause} onResume={onResume} onConnect={onConnect} onDisconnect={onDisconnect} />
       <div className="border-b border-white/10 mx-3" />

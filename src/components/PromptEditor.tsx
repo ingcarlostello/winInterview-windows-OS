@@ -37,6 +37,7 @@ export default function PromptEditor({ onSave, onRestore }: PromptEditorProps) {
   };
 
   const handleRestore = () => {
+    console.log("[PromptEditor] handleRestore called, draft was:", draft.substring(0, 50));
     onRestore();
     setDraft("");
     setRestored(true);
