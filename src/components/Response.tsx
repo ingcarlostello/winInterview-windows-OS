@@ -1,15 +1,9 @@
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { useInterviewStore } from "../stores/interview";
 import { useTranslation } from "../hooks/useTranslation";
-
-interface CodeProps {
-  node?: any;
-  className?: string;
-  children?: React.ReactNode;
-  [key: string]: any;
-}
 
 export default function Response() {
   const responseChunks = useInterviewStore((s) => s.responseChunks);
@@ -69,20 +63,42 @@ export default function Response() {
         ) : hasContent ? (
           <div className="text-green-400 text-sm leading-relaxed prose prose-invert max-w-none">
             <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
               components={{
-                code({ className, children, ...props }: CodeProps) {
+                table: ({ children }) => (
+                  <table className="w-full border-collapse border border-green-500/20 rounded mt-2 mb-2">
+                    {children}
+                  </table>
+                ),
+                thead: ({ children }) => (
+                  <thead className="bg-green-500/10">{children}</thead>
+                ),
+                tbody: ({ children }) => <tbody>{children}</tbody>,
+                tr: ({ children }) => (
+                  <tr className="border-b border-green-500/10">{children}</tr>
+                ),
+                th: ({ children }) => (
+                  <th className="border border-green-500/20 px-3 py-1.5 text-left font-semibold text-green-300">
+                    {children}
+                  </th>
+                ),
+                td: ({ children }) => (
+                  <td className="border border-green-500/20 px-3 py-1.5">{children}</td>
+                ),
+                code: ({ className, children, ...props }) => {
                   const match = /language-(\w+)/.exec(className || "");
+                  const { node, ...rest } = props;
+                  void node;
                   return match ? (
                     <SyntaxHighlighter
                       style={vscDarkPlus}
                       language={match[1]}
                       PreTag="div"
-                      {...props}
                     >
                       {String(children).replace(/\n$/, "")}
                     </SyntaxHighlighter>
                   ) : (
-                    <code className={className} {...props}>
+                    <code className={className} {...rest}>
                       {children}
                     </code>
                   );

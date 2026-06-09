@@ -53,15 +53,13 @@ export function useWebSocket() {
     setStatus("connected");
 
     const language = useInterviewStore.getState().language;
-    const ws = new WebSocket(`${WS_BASE}?lang=${language}`);
+    const customPrompt = useInterviewStore.getState().getCustomPrompt();
+    const promptParam = customPrompt.trim() ? `&prompt=${encodeURIComponent(customPrompt.trim())}` : "";
+    const ws = new WebSocket(`${WS_BASE}?lang=${language}${promptParam}`);
     wsRef.current = ws;
 
     ws.onopen = () => {
       setStatus("connected");
-      const customPrompt = useInterviewStore.getState().getCustomPrompt();
-      if (customPrompt.trim()) {
-        ws.send(`set_prompt:${customPrompt}`);
-      }
     };
 
     ws.onmessage = (event) => {
@@ -165,10 +163,9 @@ export function useWebSocket() {
 
   const setPrompt = useCallback((prompt: string) => {
     console.log("[WS] setPrompt called with:", prompt.substring(0, 50) + "...");
-    send(`set_prompt:${prompt}`);
     const language = useInterviewStore.getState().language;
     useInterviewStore.getState().setCustomPrompt(language, prompt);
-  }, [send]);
+  }, []);
 
   const restoreDefaultPrompt = useCallback(() => {
     console.log("[WS] restoreDefaultPrompt called");

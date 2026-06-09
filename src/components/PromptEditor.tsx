@@ -6,9 +6,10 @@ import { useTranslation } from "../hooks/useTranslation";
 interface PromptEditorProps {
   onSave: (prompt: string) => void;
   onRestore: () => void;
+  onConnect: () => void;
 }
 
-export default function PromptEditor({ onSave, onRestore }: PromptEditorProps) {
+export default function PromptEditor({ onSave, onRestore, onConnect }: PromptEditorProps) {
   const { t } = useTranslation();
   const language = useInterviewStore((s) => s.language);
   const customPrompts = useInterviewStore((s) => s.customPrompts);
@@ -33,6 +34,7 @@ export default function PromptEditor({ onSave, onRestore }: PromptEditorProps) {
       onSave(draft.trim());
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
+      onConnect();
     }
   };
 
