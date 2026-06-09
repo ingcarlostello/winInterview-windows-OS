@@ -68,7 +68,7 @@ export default function Overlay({
       <div className="border-b border-white/10" />
       <Controls onPause={onPause} onResume={onResume} onConnect={onConnect} onDisconnect={onDisconnect} />
       <div className="border-b border-white/10 mx-3" />
-      <PromptEditor onSave={onSavePrompt} onRestore={onRestorePrompt} />
+      <PromptEditor onSave={onSavePrompt} onRestore={onRestorePrompt} onConnect={onConnect} />
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden pt-2">
         <Transcription />
         <Response />
