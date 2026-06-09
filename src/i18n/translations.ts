@@ -7,6 +7,7 @@ export type TranslationKey =
   | "statusThinking"
   | "statusResponding"
   | "statusPaused"
+  | "statusReconnecting"
   | "btnListen"
   | "btnConnecting"
   | "btnResume"
@@ -41,6 +42,7 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     statusThinking: "Pensando...",
     statusResponding: "Respondiendo",
     statusPaused: "Pausado",
+    statusReconnecting: "Reconectando...",
     btnListen: "Escuchar",
     btnConnecting: "Conectando...",
     btnResume: "Reanudar",
@@ -74,6 +76,7 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     statusThinking: "Thinking...",
     statusResponding: "Responding",
     statusPaused: "Paused",
+    statusReconnecting: "Reconnecting...",
     btnListen: "Listen",
     btnConnecting: "Connecting...",
     btnResume: "Resume",

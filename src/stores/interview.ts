@@ -11,6 +11,7 @@ export type Status =
   | "thinking"
   | "responding"
   | "paused"
+  | "reconnecting"
   | "error";
 
 interface CustomPrompts {

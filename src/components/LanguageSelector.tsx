@@ -16,9 +16,10 @@ const options: LanguageOption[] = [
 
 interface LanguageSelectorProps {
   disabled?: boolean;
+  onChangeLanguage?: (code: Language) => void;
 }
 
-export default function LanguageSelector({ disabled = false }: LanguageSelectorProps) {
+export default function LanguageSelector({ disabled = false, onChangeLanguage }: LanguageSelectorProps) {
   const language = useInterviewStore((s) => s.language);
   const setLanguage = useInterviewStore((s) => s.setLanguage);
   const theme = useInterviewStore((s) => s.theme);
@@ -40,6 +41,7 @@ export default function LanguageSelector({ disabled = false }: LanguageSelectorP
 
   const handleSelect = (code: Language) => {
     setLanguage(code);
+    onChangeLanguage?.(code);
     setOpen(false);
   };
 
