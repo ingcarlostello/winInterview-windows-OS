@@ -1,6 +1,6 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use tauri::{Emitter, Manager};
+use tauri::{Emitter, LogicalSize, Manager, Size};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 /// Thread-safe flags shared between shortcut handlers and commands.
@@ -22,6 +22,14 @@ fn toggle_content_protected(window: tauri::Window) -> bool {
     let _ = window.set_content_protected(new_state);
     let _ = window.emit("content-protected-changed", new_state);
     new_state
+}
+
+#[tauri::command]
+fn set_window_expanded(window: tauri::Window, expanded: bool) -> Result<(), String> {
+    let width = if expanded { 1200.0 } else { 730.0 };
+    window
+        .set_size(Size::Logical(LogicalSize { width, height: 520.0 }))
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -76,11 +84,22 @@ pub fn run() {
                 }
             })?;
 
+            // ── Ctrl+Shift+C → capture screen ───────────────────────────
+            let handle3 = app.handle().clone();
+            app.global_shortcut().on_shortcut("Ctrl+Shift+C", move |_app, _shortcut, event| {
+                if event.state() == ShortcutState::Pressed {
+                    if let Some(window) = handle3.get_webview_window("main") {
+                        let _ = window.emit("capture-screen-shortcut", ());
+                    }
+                }
+            })?;
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             toggle_always_on_top,
             toggle_content_protected,
+            set_window_expanded,
             get_stealth_state,
         ])
         .run(tauri::generate_context!())

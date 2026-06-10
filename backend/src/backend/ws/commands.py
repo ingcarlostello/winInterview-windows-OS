@@ -9,6 +9,7 @@ class WsCommand(str, Enum):
     SET_LANGUAGE = "set_language"
     SET_PROMPT = "set_prompt"
     CLEAR_PROMPT = "clear_prompt"
+    CAPTURE_SCREEN = "capture_screen"
 
 
 @dataclass
@@ -32,5 +33,7 @@ def parse_command(message: str) -> ParsedCommand | None:
     if message.startswith(f"{WsCommand.SET_PROMPT}:"):
         payload = message[len(f"{WsCommand.SET_PROMPT}:"):]
         return ParsedCommand(command=WsCommand.SET_PROMPT, payload=payload)
+    if message == WsCommand.CAPTURE_SCREEN:
+        return ParsedCommand(command=WsCommand.CAPTURE_SCREEN)
     
     return None

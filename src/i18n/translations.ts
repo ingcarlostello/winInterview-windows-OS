@@ -8,6 +8,7 @@ export type TranslationKey =
   | "statusResponding"
   | "statusPaused"
   | "statusReconnecting"
+  | "statusCapturing"
   | "btnListen"
   | "btnConnecting"
   | "btnResume"
@@ -32,7 +33,19 @@ export type TranslationKey =
   | "ghostModeOn"
   | "ghostModeOff"
   | "contentProtected"
-  | "contentUnprotected";
+  | "contentUnprotected"
+  | "screenReader"
+  | "captureAgain"
+  | "clearScreen"
+  | "captureScreen"
+  | "capturing"
+  | "solution"
+  | "noScreenCapture"
+  | "promptForLLM"
+  | "analyzeScreens"
+  | "analyzing"
+  | "captureLimitReached"
+  | "promptPlaceholder";
 
 const translations: Record<Language, Record<TranslationKey, string>> = {
   es: {
@@ -43,6 +56,7 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     statusResponding: "Respondiendo",
     statusPaused: "Pausado",
     statusReconnecting: "Reconectando...",
+    statusCapturing: "Capturando...",
     btnListen: "Escuchar",
     btnConnecting: "Conectando...",
     btnResume: "Reanudar",
@@ -68,6 +82,19 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     ghostModeOff: "Ghost off",
     contentProtected: "Invisible",
     contentUnprotected: "Visible",
+    screenReader: "Lector de Pantalla",
+    captureAgain: "Capturar de nuevo",
+    clearScreen: "✕ Limpiar",
+    captureScreen: "Capturar pantalla",
+    capturing: "Capturando...",
+    solution: "Solución",
+    noScreenCapture: "Captura una pantalla para analizar",
+    promptForLLM: "PROMPT PARA EL LLM",
+    analyzeScreens: "Analizar capturas",
+    analyzing: "Analizando...",
+    captureLimitReached: "Límite de 4 capturas alcanzado",
+    promptPlaceholder:
+      "Analiza la captura de pantalla y resuelve el problema técnico mostrado paso a paso, explicando la lógica.",
   },
   en: {
     statusDisconnected: "Disconnected",
@@ -77,6 +104,7 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     statusResponding: "Responding",
     statusPaused: "Paused",
     statusReconnecting: "Reconnecting...",
+    statusCapturing: "Capturing...",
     btnListen: "Listen",
     btnConnecting: "Connecting...",
     btnResume: "Resume",
@@ -102,6 +130,19 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     ghostModeOff: "Ghost off",
     contentProtected: "Invisible",
     contentUnprotected: "Visible",
+    screenReader: "Screen Reader",
+    captureAgain: "Capture again",
+    clearScreen: "✕ Clear",
+    captureScreen: "Capture screen",
+    capturing: "Capturing...",
+    solution: "Solution",
+    noScreenCapture: "Capture a screen to analyze",
+    promptForLLM: "PROMPT FOR THE LLM",
+    analyzeScreens: "Analyze captures",
+    analyzing: "Analyzing...",
+    captureLimitReached: "Limit of 4 captures reached",
+    promptPlaceholder:
+      "Analyze the screenshot and solve the technical problem shown step by step, explaining the logic.",
   },
 };
 

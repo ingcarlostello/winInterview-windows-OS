@@ -4,8 +4,9 @@ import uuid
 from fastapi import Depends, WebSocket, WebSocketDisconnect
 from websockets.exceptions import ConnectionClosed
 
-from backend.dependencies import get_connection_manager, get_llm_service
+from backend.dependencies import get_connection_manager, get_llm_service, get_vision_service
 from backend.llm.protocol import LLMService
+from backend.llm.vision import VisionLLMService
 from backend.ws.commands import parse_command
 from backend.ws.session import AgentSession
 from backend.ws_manager import ConnectionManager
@@ -16,6 +17,7 @@ logger = logging.getLogger(__name__)
 async def websocket_endpoint(
     websocket: WebSocket,
     llm_service: LLMService = Depends(get_llm_service),
+    vision_service: VisionLLMService = Depends(get_vision_service),
     manager: ConnectionManager = Depends(get_connection_manager),
 ) -> None:
     session_id = str(uuid.uuid4())[:8]
@@ -27,6 +29,7 @@ async def websocket_endpoint(
         websocket=websocket,
         llm_service=llm_service,
         manager=manager,
+        vision_service=vision_service,
         initial_language=initial_language,
         custom_prompt=custom_prompt,
     )

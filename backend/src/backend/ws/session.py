@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import logging
 from typing import Any
 
@@ -10,6 +11,8 @@ from backend.agent.deepgram import DeepgramAgent
 from backend.audio.capture import AudioCapture
 from backend.llm.prompt import delete_custom_prompt, get_system_prompt, save_custom_prompt
 from backend.llm.protocol import LLMService
+from backend.screen.capture import ScreenCapture
+from backend.llm.vision import VisionLLMService
 from backend.ws.commands import ParsedCommand, WsCommand
 from backend.ws_manager import ConnectionManager
 
@@ -23,6 +26,7 @@ class AgentSession:
         websocket: WebSocket,
         llm_service: LLMService,
         manager: ConnectionManager,
+        vision_service: VisionLLMService,
         initial_language: str = "es",
         custom_prompt: str | None = None,
     ) -> None:
@@ -30,6 +34,7 @@ class AgentSession:
         self.websocket = websocket
         self.llm_service = llm_service
         self.manager = manager
+        self.vision_service = vision_service
         
         self.language = initial_language if initial_language in ("es", "en") else "es"
         self.is_paused = False
@@ -44,9 +49,11 @@ class AgentSession:
         self.conversation_history: list[dict[str, str]] = [
             {"role": "system", "content": system_prompt}
         ]
+        self.screen_analysis: str | None = None
         
         self.agent = DeepgramAgent(language=self.language)
         self.audio_capture = AudioCapture()
+        self.screen_capture = ScreenCapture()
         self._keepalive_task: asyncio.Task | None = None
         self._loop = asyncio.get_running_loop()
 
@@ -116,6 +123,9 @@ class AgentSession:
             delete_custom_prompt(self.language)
             self.conversation_history[0]["content"] = get_system_prompt(self.language)
             await self.manager.send_status(self.session_id, "prompt_cleared")
+            
+        elif cmd.command == WsCommand.CAPTURE_SCREEN:
+            asyncio.create_task(self._handle_screen_capture())
 
     async def _restart_agent(self, new_language: str) -> None:
         await self.manager.send_status(self.session_id, "reconnecting")
@@ -190,6 +200,40 @@ class AgentSession:
             await self.manager.send_error(self.session_id, str(e))
             
         await self.manager.send_status(self.session_id, "listening")
+
+    async def _handle_screen_capture(self) -> None:
+        previous_status = "listening" if not self.is_paused else "paused"
+        await self.manager.send_status(self.session_id, "capturing")
+
+        try:
+            image_bytes = await self._loop.run_in_executor(
+                None, self.screen_capture.capture_screen
+            )
+            image_base64 = base64.b64encode(image_bytes).decode()
+
+            await self.manager.send_screen_image(self.session_id, image_base64)
+
+            analysis_text = ""
+
+            async for chunk in self.vision_service.analyze_screen(
+                image_base64, self.session_id
+            ):
+                analysis_text += chunk
+                await self.manager.send_screen_chunk(self.session_id, chunk)
+
+            self.screen_analysis = analysis_text
+            logger.info(
+                f"Screen analysis completed for session {self.session_id}"
+            )
+
+        except Exception as e:
+            logger.error(
+                f"Screen capture failed for session {self.session_id}: {e}",
+                exc_info=True,
+            )
+            await self.manager.send_error(self.session_id, f"Capture failed: {e}")
+
+        await self.manager.send_status(self.session_id, previous_status)
 
     async def _keepalive_loop(self) -> None:
         while True:

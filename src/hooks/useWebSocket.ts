@@ -86,6 +86,7 @@ export function useWebSocket() {
               responding: "responding",
               paused: "paused",
               reconnecting: "reconnecting",
+              capturing: "capturing",
             };
             const status = statusMap[rawStatus] || "idle";
 
