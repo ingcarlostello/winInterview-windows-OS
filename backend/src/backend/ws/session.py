@@ -20,6 +20,8 @@ logger = logging.getLogger(__name__)
 
 
 class AgentSession:
+    MAX_HISTORY = 20
+
     def __init__(
         self,
         session_id: str,
@@ -88,44 +90,68 @@ class AgentSession:
         self.agent.stop()
         self.manager.disconnect(self.session_id)
 
+    def _reset_conversation(self) -> None:
+        self.conversation_history = [
+            {"role": "system", "content": get_system_prompt(self.language)}
+        ]
+
+    def _trim_history(self) -> None:
+        if len(self.conversation_history) > self.MAX_HISTORY:
+            excess = len(self.conversation_history) - self.MAX_HISTORY
+            self.conversation_history = [
+                self.conversation_history[0],
+                *self.conversation_history[1 + excess:],
+            ]
+
     async def handle_command(self, cmd: ParsedCommand) -> None:
-        if cmd.command == WsCommand.PAUSE:
-            self.is_paused = True
-            await self.audio_capture.stop()
-            await self.manager.send_status(self.session_id, "paused")
-            
-        elif cmd.command == WsCommand.RESUME:
-            self.is_paused = False
-            await self.audio_capture.start()
-            await self.manager.send_status(self.session_id, "listening")
-            
-        elif cmd.command == WsCommand.CLEAR:
-            self.conversation_history.clear()
-            self.conversation_history.append({"role": "system", "content": get_system_prompt(self.language)})
-            await self.manager.send_status(self.session_id, "cleared")
-            
-        elif cmd.command == WsCommand.SET_LANGUAGE:
-            new_lang = cmd.payload
-            if new_lang in ("es", "en") and new_lang != self.language:
-                await self._restart_agent(new_lang)
-                
-        elif cmd.command == WsCommand.SET_PROMPT:
-            custom_prompt = cmd.payload.strip()
-            if custom_prompt:
-                logger.info(f"Received set_prompt for session {self.session_id}: {custom_prompt[:100]}...")
-                save_custom_prompt(self.language, custom_prompt)
-                self.conversation_history[0]["content"] = custom_prompt
-                logger.info("Updated conversation_history[0] with custom prompt")
-                await self.manager.send_status(self.session_id, "prompt_saved")
-                
-        elif cmd.command == WsCommand.CLEAR_PROMPT:
-            logger.info(f"Received clear_prompt for session {self.session_id}")
-            delete_custom_prompt(self.language)
-            self.conversation_history[0]["content"] = get_system_prompt(self.language)
-            await self.manager.send_status(self.session_id, "prompt_cleared")
-            
-        elif cmd.command == WsCommand.CAPTURE_SCREEN:
-            asyncio.create_task(self._handle_screen_capture())
+        handler = {
+            WsCommand.PAUSE: self._handle_pause,
+            WsCommand.RESUME: self._handle_resume,
+            WsCommand.CLEAR: self._handle_clear,
+            WsCommand.SET_LANGUAGE: self._handle_set_language,
+            WsCommand.SET_PROMPT: self._handle_set_prompt,
+            WsCommand.CLEAR_PROMPT: self._handle_clear_prompt,
+            WsCommand.CAPTURE_SCREEN: self._handle_capture_screen,
+        }.get(cmd.command)
+        if handler:
+            await handler(cmd)
+
+    async def _handle_pause(self, cmd: ParsedCommand) -> None:
+        self.is_paused = True
+        await self.audio_capture.stop()
+        await self.manager.send_status(self.session_id, "paused")
+
+    async def _handle_resume(self, cmd: ParsedCommand) -> None:
+        self.is_paused = False
+        await self.audio_capture.start()
+        await self.manager.send_status(self.session_id, "listening")
+
+    async def _handle_clear(self, cmd: ParsedCommand) -> None:
+        self._reset_conversation()
+        await self.manager.send_status(self.session_id, "cleared")
+
+    async def _handle_set_language(self, cmd: ParsedCommand) -> None:
+        new_lang = cmd.payload
+        if new_lang in ("es", "en") and new_lang != self.language:
+            await self._restart_agent(new_lang)
+
+    async def _handle_set_prompt(self, cmd: ParsedCommand) -> None:
+        custom_prompt = cmd.payload.strip()
+        if custom_prompt:
+            logger.info(f"Received set_prompt for session {self.session_id}: {custom_prompt[:100]}...")
+            save_custom_prompt(self.language, custom_prompt)
+            self.conversation_history[0]["content"] = custom_prompt
+            logger.info("Updated conversation_history[0] with custom prompt")
+            await self.manager.send_status(self.session_id, "prompt_saved")
+
+    async def _handle_clear_prompt(self, cmd: ParsedCommand) -> None:
+        logger.info(f"Received clear_prompt for session {self.session_id}")
+        delete_custom_prompt(self.language)
+        self.conversation_history[0]["content"] = get_system_prompt(self.language)
+        await self.manager.send_status(self.session_id, "prompt_cleared")
+
+    async def _handle_capture_screen(self, cmd: ParsedCommand) -> None:
+        asyncio.create_task(self._handle_screen_capture())
 
     async def _restart_agent(self, new_language: str) -> None:
         await self.manager.send_status(self.session_id, "reconnecting")
@@ -133,8 +159,7 @@ class AgentSession:
         self.agent.stop()
         
         self.language = new_language
-        self.conversation_history.clear()
-        self.conversation_history.append({"role": "system", "content": get_system_prompt(self.language)})
+        self._reset_conversation()
         
         agent_started = self.agent.start(self._on_agent_message)
         
@@ -183,6 +208,7 @@ class AgentSession:
         await self.manager.send_status(self.session_id, "thinking")
         
         self.conversation_history.append({"role": "user", "content": text})
+        self._trim_history()
         
         response_text = ""
         first_chunk = True
@@ -196,7 +222,9 @@ class AgentSession:
                 await self.manager.send_response_chunk(self.session_id, chunk)
                 
             self.conversation_history.append({"role": "assistant", "content": response_text})
+            self._trim_history()
         except Exception as e:
+            logger.exception("LLM streaming failed for session %s", self.session_id)
             await self.manager.send_error(self.session_id, str(e))
             
         await self.manager.send_status(self.session_id, "listening")
@@ -226,12 +254,9 @@ class AgentSession:
                 f"Screen analysis completed for session {self.session_id}"
             )
 
-        except Exception as e:
-            logger.error(
-                f"Screen capture failed for session {self.session_id}: {e}",
-                exc_info=True,
-            )
-            await self.manager.send_error(self.session_id, f"Capture failed: {e}")
+        except Exception:
+            logger.exception("Screen capture failed for session %s", self.session_id)
+            await self.manager.send_error(self.session_id, "Capture failed")
 
         await self.manager.send_status(self.session_id, previous_status)
 
