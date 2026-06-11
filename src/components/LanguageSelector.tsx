@@ -56,8 +56,8 @@ export default function LanguageSelector({ disabled = false, onChangeLanguage }:
         className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg transition-colors ${
           buttonDisabled
             ? "border border-white/5 bg-white/5 text-white/30 cursor-not-allowed"
-            : theme === "liquid"
-              ? "glass-button"
+            : theme === "glass"
+              ? "glass-button-active"
               : "border border-white/15 bg-white/5 text-white/70 hover:bg-white/10 hover:text-white cursor-pointer"
         }`}
       >

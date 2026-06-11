@@ -53,8 +53,8 @@ export default function PromptEditor({ onSave, onRestore, onConnect }: PromptEdi
           type="button"
           onClick={togglePromptEditor}
           className={`flex items-center gap-1.5 transition-colors cursor-pointer ${
-            theme === "liquid"
-              ? "glass-button px-2.5 py-1 rounded-full text-xs font-medium"
+            theme === "glass"
+              ? "glass-button-active px-2.5 py-1 rounded-full text-xs font-medium"
               : "px-2 py-1 text-[10px] uppercase tracking-wider text-white/40 hover:text-white/70"
           }`}
         >
@@ -100,8 +100,8 @@ export default function PromptEditor({ onSave, onRestore, onConnect }: PromptEdi
             onClick={handleSave}
             disabled={!draft.trim()}
             className={`flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded transition-colors cursor-pointer ${
-              theme === "liquid"
-                ? "glass-button disabled:opacity-40 disabled:cursor-not-allowed"
+              theme === "glass"
+                ? "glass-button-active disabled:opacity-40 disabled:cursor-not-allowed"
                 : saved
                   ? "bg-accent/30 text-accent"
                   : "bg-accent-soft border border-accent-border text-accent hover:bg-accent/40 disabled:opacity-40 disabled:cursor-not-allowed"
@@ -114,8 +114,8 @@ export default function PromptEditor({ onSave, onRestore, onConnect }: PromptEdi
             type="button"
             onClick={handleRestore}
             className={`flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded transition-colors cursor-pointer ${
-              theme === "liquid"
-                ? "glass-button"
+              theme === "glass"
+                ? "glass-button-active"
                 : restored 
                   ? "bg-white/10 text-white/70 border border-white/10" 
                   : "border border-white/10 text-white/50 hover:text-white/70 hover:bg-white/10"

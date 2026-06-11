@@ -42,17 +42,17 @@ export default function StatusBar({ onChangeLanguage, onToggleScreenPanel }: Sta
         </div>
         
         <button
-          onClick={() => useInterviewStore.getState().setTheme(theme === "dark" ? "liquid" : "dark")}
+          onClick={() => useInterviewStore.getState().setTheme(theme === "dark" ? "glass" : "dark")}
           className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full transition-all group ${
-            theme === "liquid" 
-              ? "glass-button" 
+            theme === "glass" 
+              ? "glass-button-active" 
               : "border border-white/10 bg-white/5 hover:bg-white/10 text-white/60 hover:text-white cursor-pointer"
           }`}
-          title={theme === "dark" ? "Cambiar a Liquid Glass" : "Cambiar a Dark"}
+          title={theme === "dark" ? "Cambiar a Glass" : "Cambiar a Dark"}
         >
-          <Layers size={12} className={theme === "liquid" ? "" : "text-white/60 group-hover:text-white"} />
+          <Layers size={12} className={theme === "glass" ? "" : "text-white/60 group-hover:text-white"} />
           <span className="text-[10px] font-medium">
-            {theme === "dark" ? "Dark" : "Liquid"}
+            {theme === "dark" ? "Dark" : t("themeGlass")}
           </span>
         </button>
 
