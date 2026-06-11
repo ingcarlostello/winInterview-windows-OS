@@ -121,7 +121,7 @@ export default function ScreenPanel() {
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2.5 shrink-0">
         <div className="flex items-center gap-2">
-          <Monitor className="text-green-500" size={16} />
+          <Monitor className="text-accent" size={16} />
           <span className="text-white font-semibold text-xs">Lector 2</span>
         </div>
         <button
@@ -166,7 +166,7 @@ export default function ScreenPanel() {
         {!hasAnalysis && (
           <div className="shrink-0">
             {isCapturingScreen ? (
-              <div className="flex items-center gap-2 text-green-400 text-xs py-2">
+              <div className="flex items-center gap-2 text-accent text-xs py-2">
                 <RefreshCw size={12} className="animate-spin" />
                 <span>{t("capturing")}</span>
               </div>
@@ -179,13 +179,13 @@ export default function ScreenPanel() {
                   <button
                     onClick={handleCapture}
                     disabled={!canCapture}
-                    className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-green-500/15 border border-green-500/30 text-green-400 text-xs font-medium hover:bg-green-500/25 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-accent-soft border border-accent-border text-accent text-xs font-medium hover:bg-accent/25 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Camera size={12} />
                     {t("captureScreen")}
                   </button>
                   {!canCapture && (
-                    <span className="text-green-400/60 text-[10px]">
+                      <span className="text-accent/60 text-[10px]">
                       {t("captureLimitReached")}
                     </span>
                   )}
@@ -199,8 +199,8 @@ export default function ScreenPanel() {
         {hasCaptures && !hasAnalysis && (
           <div className="flex flex-col gap-2 shrink-0">
             <div className="flex items-center gap-1.5">
-              <Sparkles className="text-green-500" size={12} />
-              <span className="text-green-400 text-[10px] font-semibold uppercase tracking-wider">
+              <Sparkles className="text-accent" size={12} />
+              <span className="text-accent text-[10px] font-semibold uppercase tracking-wider">
                 {t("promptForLLM")}
               </span>
             </div>
@@ -215,7 +215,7 @@ export default function ScreenPanel() {
                 <button
                   onClick={handleAnalyze}
                   disabled={isAnalyzingScreen}
-                  className="flex items-center gap-2 px-4 py-1.5 rounded-lg bg-green-500/20 border border-green-500/30 text-green-400 text-xs font-medium hover:bg-green-500/30 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center gap-2 px-4 py-1.5 rounded-lg bg-accent/20 border border-accent-border text-accent text-xs font-medium hover:bg-accent/30 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isAnalyzingScreen ? (
                     <>
@@ -238,8 +238,8 @@ export default function ScreenPanel() {
         {hasAnalysis && (
           <div className="flex-1 flex flex-col min-h-0">
             <div className="flex items-center gap-1.5 mb-2 shrink-0">
-              <Sparkles className="text-green-500" size={12} />
-              <span className="text-green-400 text-[10px] font-semibold uppercase tracking-wider">
+              <Sparkles className="text-accent" size={12} />
+              <span className="text-accent text-[10px] font-semibold uppercase tracking-wider">
                 {t("solution")}
               </span>
             </div>
@@ -275,7 +275,7 @@ export default function ScreenPanel() {
                 </div>
 
                 {isAnalyzingScreen && !responseText && (
-                  <div className="flex items-center gap-2 text-green-400 text-xs">
+                  <div className="flex items-center gap-2 text-accent text-xs">
                     <RefreshCw size={12} className="animate-spin" />
                     <span>{t("analyzing")}</span>
                   </div>
@@ -294,7 +294,7 @@ export default function ScreenPanel() {
             <button
               onClick={handleCapture}
               disabled={!canCapture}
-              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-green-500/15 border border-green-500/30 text-green-400 text-xs font-medium hover:bg-green-500/25 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-accent-soft border border-accent-border text-accent text-xs font-medium hover:bg-accent/25 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <RefreshCw size={12} />
               {t("captureAgain")}

@@ -38,7 +38,7 @@ export default function Controls({
             className={`flex items-center gap-1.5 mt-3 mb-1 px-3 py-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
               theme === "liquid"
                 ? "glass-button"
-                : "bg-green-500/20 border border-green/30 text-green-400 hover:bg-green-500/50"
+                : "bg-accent-soft border border-accent-border text-accent hover:bg-accent/50"
             }`}
           >
             <Mic size={13} />
@@ -48,7 +48,7 @@ export default function Controls({
           <button
             type="button"
             disabled
-            className="flex items-center gap-1.5 px-3 py-1.5 mt-3 mb-1 text-xs font-medium rounded-lg bg-green-600/50 text-white/70 cursor-not-allowed"
+            className="flex items-center gap-1.5 px-3 py-1.5 mt-3 mb-1 text-xs font-medium rounded-lg bg-accent-press/50 text-white/70 cursor-not-allowed"
           >
             <svg
               className="w-3.5 h-3.5 animate-spin"
@@ -70,8 +70,8 @@ export default function Controls({
                 theme === "liquid"
                   ? "glass-button"
                   : isPaused
-                    ? "border border-green/30 bg-green-600/50 text-green-400 hover:bg-green-500/50"
-                    : "border border-yellow/30 bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/50"
+                    ? "border border-accent-border bg-accent-press/50 text-accent hover:bg-accent/50"
+                    : "border border-amber/30 bg-amber/20 text-amber hover:bg-amber/30"
               }`}
             >
               {isPaused ? (
@@ -108,7 +108,7 @@ export default function Controls({
           theme === "liquid"
             ? "glass-button"
             : contentProtected
-              ? "bg-green-500/20 text-green-400 hover:bg-green-500/30"
+              ? "bg-accent-soft text-accent hover:bg-accent/30"
               : "bg-red-500/20 text-red-400 hover:bg-red-500/30"
         }`}
         title={contentProtected ? t("contentProtected") : t("contentUnprotected")}

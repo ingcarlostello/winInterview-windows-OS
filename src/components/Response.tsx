@@ -27,11 +27,11 @@ export default function Response() {
     <div className="px-3 pb-2 flex-1 flex flex-col min-h-0">
       <div className="flex items-center justify-between mb-1.5">
         <div className="flex items-center gap-1.5 mt-1">
-          <p className="text-[10px] uppercase tracking-wider text-green-400/80 font-medium">
+          <p className="text-[10px] uppercase tracking-wider text-accent/80 font-medium">
             {t("aiCopilot")}
           </p>
           {(status === "listening" || status === "thinking" || status === "responding") && (
-            <svg className="w-3.5 h-3.5 text-green-400 icon-spin" viewBox="0 0 24 24" fill="currentColor">
+            <svg className="w-3.5 h-3.5 text-accent icon-spin" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8L12 2z" />
             </svg>
           )}
@@ -50,40 +50,40 @@ export default function Response() {
           </button>
         )}
       </div>
-      <div className="border border-green-500/30 rounded-lg bg-black/30 px-3 py-2 flex-1 overflow-y-auto scrollbar-thin min-h-[80px]">
+      <div className="border border-accent-border rounded-lg bg-black/30 px-3 py-2 flex-1 overflow-y-auto scrollbar-thin min-h-[80px]">
         {isThinking ? (
-          <div className="flex items-center gap-2 text-green-400/60 text-sm">
+          <div className="flex items-center gap-2 text-accent/60 text-sm">
             <span className="flex gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-400/60 dot-pulse-anim" style={{ animationDelay: "0ms" }} />
-              <span className="w-1.5 h-1.5 rounded-full bg-green-400/60 dot-pulse-anim" style={{ animationDelay: "200ms" }} />
-              <span className="w-1.5 h-1.5 rounded-full bg-green-400/60 dot-pulse-anim" style={{ animationDelay: "400ms" }} />
+              <span className="w-1.5 h-1.5 rounded-full bg-accent/60 dot-pulse-anim" style={{ animationDelay: "0ms" }} />
+              <span className="w-1.5 h-1.5 rounded-full bg-accent/60 dot-pulse-anim" style={{ animationDelay: "200ms" }} />
+              <span className="w-1.5 h-1.5 rounded-full bg-accent/60 dot-pulse-anim" style={{ animationDelay: "400ms" }} />
             </span>
             <span className="text-xs">{t("generatingResponse")}</span>
           </div>
         ) : hasContent ? (
-          <div className="text-green-400 text-sm leading-relaxed prose prose-invert max-w-none">
+          <div className="text-accent text-sm leading-relaxed prose prose-invert max-w-none">
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               components={{
                 table: ({ children }) => (
-                  <table className="w-full border-collapse border border-green-500/20 rounded mt-2 mb-2">
+                  <table className="w-full border-collapse border border-accent/20 rounded mt-2 mb-2">
                     {children}
                   </table>
                 ),
                 thead: ({ children }) => (
-                  <thead className="bg-green-500/10">{children}</thead>
+                  <thead className="bg-accent-soft-2">{children}</thead>
                 ),
                 tbody: ({ children }) => <tbody>{children}</tbody>,
                 tr: ({ children }) => (
-                  <tr className="border-b border-green-500/10">{children}</tr>
+                  <tr className="border-b border-accent/10">{children}</tr>
                 ),
                 th: ({ children }) => (
-                  <th className="border border-green-500/20 px-3 py-1.5 text-left font-semibold text-green-300">
+                  <th className="border border-accent/20 px-3 py-1.5 text-left font-semibold text-accent-hover">
                     {children}
                   </th>
                 ),
                 td: ({ children }) => (
-                  <td className="border border-green-500/20 px-3 py-1.5">{children}</td>
+                  <td className="border border-accent/20 px-3 py-1.5">{children}</td>
                 ),
                 code: ({ className, children, ...props }) => {
                   const match = /language-(\w+)/.exec(className || "");

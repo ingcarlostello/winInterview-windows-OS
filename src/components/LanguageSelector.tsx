@@ -83,7 +83,7 @@ export default function LanguageSelector({ disabled = false, onChangeLanguage }:
               }`}
             >
               <span className="w-4 flex items-center justify-center">
-                {option.code === language && <Check size={12} className="text-green-400" />}
+                {option.code === language && <Check size={12} className="text-accent" />}
               </span>
               <span className="text-sm">{option.flag}</span>
               <span>{option.label}</span>
