@@ -1,4 +1,4 @@
-import { Bot, Layers } from "lucide-react";
+import { Bot, Layers, Monitor } from "lucide-react";
 import { useInterviewStore } from "../stores/interview";
 import type { Status } from "../stores/interview";
 import LanguageSelector from "./LanguageSelector";
@@ -12,20 +12,23 @@ const statusConfig: Record<Status, { labelKey: string; color: string; pulse: boo
   responding: { labelKey: "statusResponding", color: "bg-green-500", pulse: false, showMic: true },
   paused: { labelKey: "statusPaused", color: "bg-orange-500", pulse: false, showMic: false },
   reconnecting: { labelKey: "statusReconnecting", color: "bg-yellow-500", pulse: true, showMic: false },
+  capturing: { labelKey: "statusCapturing", color: "bg-green-500", pulse: true, showMic: false },
   error: { labelKey: "statusDisconnected", color: "bg-red-500", pulse: false, showMic: false },
 };
 
 interface StatusBarProps {
   onChangeLanguage?: (language: string) => void;
+  onToggleScreenPanel?: () => void;
 }
 
-export default function StatusBar({ onChangeLanguage }: StatusBarProps) {
+export default function StatusBar({ onChangeLanguage, onToggleScreenPanel }: StatusBarProps) {
   const status = useInterviewStore((s) => s.status);
   const error = useInterviewStore((s) => s.error);
   const ghostMode = useInterviewStore((s) => s.ghostMode);
   const contentProtected = useInterviewStore((s) => s.contentProtected);
   const theme = useInterviewStore((s) => s.theme);
   const config = statusConfig[status];
+  const screenPanelOpen = useInterviewStore((s) => s.screenPanelOpen);
   const { t } = useTranslation();
 
   return (
@@ -52,6 +55,22 @@ export default function StatusBar({ onChangeLanguage }: StatusBarProps) {
             {theme === "dark" ? "Dark" : "Liquid"}
           </span>
         </button>
+
+        {onToggleScreenPanel && (
+          <button
+            onClick={onToggleScreenPanel}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full transition-all cursor-pointer ${
+              screenPanelOpen
+                ? "bg-green-500/15 border border-green-500/30 text-green-400"
+                : "border border-white/10 bg-white/5 hover:bg-white/10 text-white/60 hover:text-white"
+            }`}
+            //title={t("screenReader")}
+            title={"lector 1"}
+          >
+            <Monitor size={12} />
+            <span className="text-[10px] font-medium">{t("screenReader")}</span>
+          </button>
+        )}
       </div>
       <LanguageSelector onChangeLanguage={onChangeLanguage} />
       <div className="flex items-center gap-1.5 shrink-0">

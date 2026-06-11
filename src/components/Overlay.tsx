@@ -7,6 +7,7 @@ import Response from "./Response";
 import Controls from "./Controls";
 import QuestionCounter from "./QuestionCounter";
 import PromptEditor from "./PromptEditor";
+import ScreenPanel from "./ScreenPanel";
 
 interface OverlayProps {
   onPause: () => void;
@@ -16,6 +17,7 @@ interface OverlayProps {
   onSavePrompt: (prompt: string) => void;
   onRestorePrompt: () => void;
   onChangeLanguage: (language: string) => void;
+  onToggleScreenPanel: () => void;
 }
 
 export default function Overlay({
@@ -26,12 +28,14 @@ export default function Overlay({
   onSavePrompt,
   onRestorePrompt,
   onChangeLanguage,
+  onToggleScreenPanel,
 }: OverlayProps) {
   const status = useInterviewStore((s) => s.status);
   const ghostMode = useInterviewStore((s) => s.ghostMode);
   const setGhostMode = useInterviewStore((s) => s.setGhostMode);
   const setContentProtected = useInterviewStore((s) => s.setContentProtected);
   const theme = useInterviewStore((s) => s.theme);
+  const screenPanelOpen = useInterviewStore((s) => s.screenPanelOpen);
   const isActive = status === "listening" || status === "thinking" || status === "responding";
 
   // Listen for Tauri events from the Rust layer
@@ -63,17 +67,24 @@ export default function Overlay({
     : (isLiquid && !ghostMode ? "liquid-idle-aura" : "");
 
   return (
-    <div className={`shadow-[0px_8px_48px_-8px_rgba(120,160,255,0.2),0px_2px_16px_rgba(255,255,255,0.06)] h-full w-full flex flex-col ${bgClass} rounded-2xl border shadow-2xl transition-all duration-500 ${borderClass} ${auraClass} ${ghostMode ? "ghost-active" : ""}`}>
-      <StatusBar onChangeLanguage={onChangeLanguage} />
-      <div className="border-b border-white/10" />
-      <Controls onPause={onPause} onResume={onResume} onConnect={onConnect} onDisconnect={onDisconnect} />
-      <div className="border-b border-white/10 mx-3" />
-      <PromptEditor onSave={onSavePrompt} onRestore={onRestorePrompt} onConnect={onConnect} />
-      <div className="flex-1 flex flex-col min-h-0 overflow-hidden pt-2">
-        <Transcription />
-        <Response />
+    <div className={`shadow-[0px_8px_48px_-8px_rgba(120,160,255,0.2),0px_2px_16px_rgba(255,255,255,0.06)] h-full w-full flex flex-row ${bgClass} rounded-2xl border shadow-2xl transition-all duration-500 ${borderClass} ${auraClass} ${ghostMode ? "ghost-active" : ""}`}>
+      <div className={`flex flex-col h-full ${screenPanelOpen ? "w-[730px]" : "w-full"} flex-shrink-0 transition-all duration-300`}>
+        <StatusBar onChangeLanguage={onChangeLanguage} onToggleScreenPanel={onToggleScreenPanel} />
+        <div className="border-b border-white/10" />
+        <Controls onPause={onPause} onResume={onResume} onConnect={onConnect} onDisconnect={onDisconnect} />
+        <div className="border-b border-white/10 mx-3" />
+        <PromptEditor onSave={onSavePrompt} onRestore={onRestorePrompt} onConnect={onConnect} />
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden pt-2">
+          <Transcription />
+          <Response />
+        </div>
+        <QuestionCounter />
       </div>
-      <QuestionCounter />
+      {screenPanelOpen && (
+        <div className="flex-1 min-w-0">
+          <ScreenPanel />
+        </div>
+      )}
     </div>
   );
 }

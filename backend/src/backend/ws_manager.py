@@ -37,6 +37,12 @@ class ConnectionManager:
     async def send_error(self, session_id: str, error: str) -> None:
         await self.send(session_id, "error", {"message": error})
 
+    async def send_screen_chunk(self, session_id: str, chunk: str) -> None:
+        await self.send(session_id, "screen_chunk", {"content": chunk})
+
+    async def send_screen_image(self, session_id: str, image_base64: str) -> None:
+        await self.send(session_id, "screen_image", {"image": image_base64})
+
     @property
     def active_count(self) -> int:
         return len(self._connections)

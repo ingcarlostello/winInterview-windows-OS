@@ -12,6 +12,7 @@ export type Status =
   | "responding"
   | "paused"
   | "reconnecting"
+  | "capturing"
   | "error";
 
 interface CustomPrompts {
@@ -31,6 +32,13 @@ interface InterviewState {
   ghostMode: boolean;
   contentProtected: boolean;
   theme: Theme;
+  screenPanelOpen: boolean;
+  screenImage: string | null;
+  screenImages: string[];
+  screenChunks: string[];
+  isCapturingScreen: boolean;
+  isAnalyzingScreen: boolean;
+  screenPrompt: string;
 
   setStatus: (status: Status) => void;
   setLanguage: (language: Language) => void;
@@ -49,6 +57,17 @@ interface InterviewState {
   setGhostMode: (on: boolean) => void;
   setContentProtected: (on: boolean) => void;
   setTheme: (theme: Theme) => void;
+  setScreenPanelOpen: (open: boolean) => void;
+  setScreenImage: (image: string | null) => void;
+  addScreenImage: (image: string) => void;
+  clearScreenImages: () => void;
+  addScreenChunk: (chunk: string) => void;
+  clearScreenChunks: () => void;
+  clearScreen: () => void;
+  setIsCapturingScreen: (capturing: boolean) => void;
+  setIsAnalyzingScreen: (analyzing: boolean) => void;
+  setScreenPrompt: (prompt: string) => void;
+  canCaptureScreen: () => boolean;
 }
 
 export const useInterviewStore = create<InterviewState>()(
@@ -65,6 +84,13 @@ export const useInterviewStore = create<InterviewState>()(
       ghostMode: false,
       contentProtected: true,
       theme: "dark",
+      screenPanelOpen: false,
+      screenImage: null,
+      screenImages: [],
+      screenChunks: [],
+      isCapturingScreen: false,
+      isAnalyzingScreen: false,
+      screenPrompt: "",
 
       setStatus: (status) => set({ status }),
 
@@ -121,6 +147,33 @@ export const useInterviewStore = create<InterviewState>()(
       setGhostMode: (on) => set({ ghostMode: on }),
       setContentProtected: (on) => set({ contentProtected: on }),
       setTheme: (theme) => set({ theme }),
+      setScreenPanelOpen: (open) => set({ screenPanelOpen: open }),
+      setScreenImage: (image) => set({ screenImage: image }),
+      addScreenImage: (image) =>
+        set((state) => {
+          if (state.screenImages.length >= 4) return state;
+          return { screenImages: [...state.screenImages, image] };
+        }),
+      clearScreenImages: () => set({ screenImages: [] }),
+      addScreenChunk: (chunk) =>
+        set((state) => ({
+          screenChunks: [...state.screenChunks, chunk],
+        })),
+      clearScreenChunks: () => set({ screenChunks: [] }),
+      clearScreen: () =>
+        set({
+          screenChunks: [],
+          screenImage: null,
+          screenImages: [],
+          isAnalyzingScreen: false,
+        }),
+      setIsCapturingScreen: (capturing) => set({ isCapturingScreen: capturing }),
+      setIsAnalyzingScreen: (analyzing) => set({ isAnalyzingScreen: analyzing }),
+      setScreenPrompt: (prompt) => set({ screenPrompt: prompt }),
+      canCaptureScreen: () => {
+        const state = get();
+        return state.screenImages.length < 4;
+      },
     }),
     {
       name: "interview-settings",
