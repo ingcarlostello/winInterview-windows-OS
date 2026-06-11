@@ -7,11 +7,11 @@ logger = logging.getLogger(__name__)
 
 
 class VisionLLMService:
-    """Servicio de visión para análisis de capturas de pantalla usando Qwen via NVIDIA."""
+    """Servicio de visión para análisis de capturas de pantalla usando Qwen via DashScope."""
 
     def __init__(self, api_key: str) -> None:
         self.client = AsyncOpenAI(
-            base_url="https://integrate.api.nvidia.com/v1",
+            base_url="https://ws-s1wgsa8mxoickj8w.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
             api_key=api_key,
         )
 
@@ -52,17 +52,12 @@ class VisionLLMService:
 
         try:
             completion = await self.client.chat.completions.create(
-                model="qwen/qwen3.5-397b-a17b",
+                model="qwen3.6-plus",
                 messages=messages,
                 max_tokens=16384,
                 temperature=0.60,
                 top_p=0.95,
-                extra_body={
-                    "top_k": 20,
-                    "presence_penalty": 0,
-                    "repetition_penalty": 1,
-                    "chat_template_kwargs": {"enable_thinking": True},
-                },
+                extra_body={"enable_thinking": True},
                 stream=True,
             )
             async for chunk in completion:
@@ -120,17 +115,12 @@ class VisionLLMService:
 
         try:
             completion = await self.client.chat.completions.create(
-                model="qwen/qwen3.5-397b-a17b",
+                model="qwen3.6-plus",
                 messages=messages,
                 max_tokens=16384,
                 temperature=0.60,
                 top_p=0.95,
-                extra_body={
-                    "top_k": 20,
-                    "presence_penalty": 0,
-                    "repetition_penalty": 1,
-                    "chat_template_kwargs": {"enable_thinking": True},
-                },
+                extra_body={"enable_thinking": True},
                 stream=True,
             )
             async for chunk in completion:
