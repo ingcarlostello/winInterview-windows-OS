@@ -67,3 +67,53 @@
   --danger-soft:   var(--color-danger-soft);
   --border-danger: var(--color-border-danger);
 }
+
+/* ============================================================
+   GLASS THEME TOKENS
+   Activated by adding `data-theme="glass"` to any ancestor
+   (typically <html> or the root container in Overlay.tsx).
+   ============================================================ */
+
+[data-theme="glass"] {
+  /* ----- Backgrounds (translucent over window backdrop) ----- */
+  --color-bg-base:    rgb(20 22 30 / 0.45);   /* fallback if no backdrop */
+  --color-bg-elev-1:  rgb(255 255 255 / 0.06);
+  --color-bg-elev-2:  rgb(255 255 255 / 0.10);
+  --color-bg-elev-3:  rgb(255 255 255 / 0.16);
+  --color-bg-inset:   rgb(0 0 0 / 0.20);
+
+  /* ----- Borders (brighter for visibility on light backdrop) ----- */
+  --color-border:        rgb(255 255 255 / 0.12);
+  --color-border-strong: rgb(255 255 255 / 0.22);
+  --color-border-accent: rgb(163 230 53 / 0.45);   /* lime más vivo */
+  --color-border-danger: rgb(239 68 68 / 0.55);
+
+  /* ----- Text (slightly brighter for contrast on translucent bg) ----- */
+  --color-text-primary:   #ffffff;
+  --color-text-secondary: rgb(255 255 255 / 0.85);
+  --color-text-muted:     rgb(255 255 255 / 0.55);
+
+  /* ----- Accent (lime, same hue, higher contrast variants) ----- */
+  --color-accent:        #b6f03f;        /* accent-hover del dark */
+  --color-accent-hover:  #c7f755;
+  --color-accent-press:  #a3e635;
+  --color-accent-soft:   rgb(182 240 63 / 0.18);
+  --color-accent-soft-2: rgb(182 240 63 / 0.08);
+  --color-accent-glow:   rgb(182 240 63 / 0.40);
+  --color-accent-border: rgb(182 240 63 / 0.45);
+
+  /* ----- Danger (red, same hue) ----- */
+  --color-danger:        #f87171;        /* un poco más claro para glass */
+  --color-danger-soft:   rgb(248 113 113 / 0.18);
+
+  /* ----- Status ----- */
+  --color-success:      #4ade80;
+  --color-success-soft: rgb(74 222 128 / 0.18);
+
+  /* ----- Glass-specific motion (más sutil en glass) ----- */
+  --ease-glass: cubic-bezier(0.32, 0.72, 0, 1);   /* Apple-ish ease */
+}
+
+html[data-theme="glass"] {
+  font-feature-settings: "ss01", "cv11";
+}

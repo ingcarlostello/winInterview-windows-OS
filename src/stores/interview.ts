@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 export type Language = "es" | "en";
-export type Theme = "dark" | "liquid";
+export type Theme = "dark" | "glass";
 
 export type Status =
   | "idle"
@@ -182,6 +182,15 @@ export const useInterviewStore = create<InterviewState>()(
         language: state.language,
         theme: state.theme,
       }),
+      migrate: (persistedState: unknown) => {
+        if (persistedState && typeof persistedState === "object" && "theme" in persistedState) {
+          const theme = (persistedState as { theme: unknown }).theme;
+          if (theme !== "dark" && theme !== "glass") {
+            (persistedState as { theme: string }).theme = "dark";
+          }
+        }
+        return persistedState as never;
+      },
     },
   ),
 );

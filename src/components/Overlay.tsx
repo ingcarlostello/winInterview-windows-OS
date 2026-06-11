@@ -52,22 +52,22 @@ export default function Overlay({
     };
   }, [setGhostMode, setContentProtected]);
 
-  const isLiquid = theme === "liquid";
+const isGlass = theme === "glass";
 
-  const bgClass = isLiquid ? "glass-base" : "bg-black/60 backdrop-blur-xl";
+  const bgClass = isGlass ? "glass-bg" : "bg-black/60 backdrop-blur-xl";
   
   const borderClass = ghostMode
     ? "border-danger/50"
-    : isLiquid 
+    : isGlass 
       ? (isActive ? "border-accent/60" : "")
       : (isActive ? "border-accent-border" : "border-white/10");
 
   const auraClass = isActive 
-    ? (isLiquid ? "liquid-aura-active" : "aura-active") 
-    : (isLiquid && !ghostMode ? "liquid-idle-aura" : "");
+    ? (isGlass ? "glass-aura-active" : "aura-active") 
+    : (isGlass && !ghostMode ? "glass-aura-idle" : "");
 
   return (
-    <div className={`shadow-[0px_8px_48px_-8px_rgba(120,160,255,0.2),0px_2px_16px_rgba(255,255,255,0.06)] h-full w-full flex flex-row ${bgClass} rounded-2xl border shadow-2xl transition-all duration-500 ${borderClass} ${auraClass} ${ghostMode ? "ghost-active" : ""}`}>
+    <div data-theme={theme} className={`shadow-[0px_8px_48px_-8px_rgba(120,160,255,0.2),0px_2px_16px_rgba(255,255,255,0.06)] h-full w-full flex flex-row ${bgClass} rounded-2xl border shadow-2xl transition-all duration-500 ${borderClass} ${auraClass} ${ghostMode ? "ghost-active" : ""}`}>
       <div className={`flex flex-col h-full ${screenPanelOpen ? "w-[730px]" : "w-full"} flex-shrink-0 transition-all duration-300`}>
         <StatusBar onChangeLanguage={onChangeLanguage} onToggleScreenPanel={onToggleScreenPanel} />
         <div className="border-b border-white/10" />

@@ -36,8 +36,8 @@ export default function Controls({
             type="button"
             onClick={onConnect}
             className={`flex items-center gap-1.5 mt-3 mb-1 px-3 py-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
-              theme === "liquid"
-                ? "glass-button"
+              theme === "glass"
+                ? "glass-button-active"
                 : "bg-accent-soft border border-accent-border text-accent hover:bg-accent/50"
             }`}
           >
@@ -67,8 +67,8 @@ export default function Controls({
               type="button"
               onClick={() => (isPaused ? onResume() : onPause())}
               className={`flex items-center gap-1.5 px-3 py-1.5 mt-3 mb-1 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
-                theme === "liquid"
-                  ? "glass-button"
+                theme === "glass"
+                  ? "glass-button-active"
                   : isPaused
                     ? "border border-accent-border bg-accent-press/50 text-accent hover:bg-accent/50"
                     : "border border-amber/30 bg-amber/20 text-amber hover:bg-amber/30"
@@ -90,8 +90,8 @@ export default function Controls({
               type="button"
               onClick={onDisconnect}
               className={`flex items-center gap-1.5 px-3 py-1.5 mt-3 mb-1 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
-                theme === "liquid"
-                  ? "glass-button"
+                theme === "glass"
+                  ? "glass-button-active"
                   : "border border-red/30 text-red-400 bg-red-500/20 hover:bg-red-500/50"
               }`}
             >
@@ -105,8 +105,8 @@ export default function Controls({
         type="button"
         onClick={handleToggleProtection}
         className={`flex items-center justify-center w-6 h-6 rounded-full transition-colors cursor-pointer ${
-          theme === "liquid"
-            ? "glass-button"
+          theme === "glass"
+            ? "glass-button-active"
             : contentProtected
               ? "bg-accent-soft text-accent hover:bg-accent/30"
               : "bg-red-500/20 text-red-400 hover:bg-red-500/30"

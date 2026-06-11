@@ -45,7 +45,8 @@ export type TranslationKey =
   | "analyzeScreens"
   | "analyzing"
   | "captureLimitReached"
-  | "promptPlaceholder";
+  | "promptPlaceholder"
+  | "themeGlass";
 
 const translations: Record<Language, Record<TranslationKey, string>> = {
   es: {
@@ -93,6 +94,7 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     analyzeScreens: "Analizar capturas",
     analyzing: "Analizando...",
     captureLimitReached: "Límite de 4 capturas alcanzado",
+    themeGlass: "Glass",
     promptPlaceholder:
       "Analiza la captura de pantalla y resuelve el problema técnico mostrado paso a paso, explicando la lógica.",
   },
@@ -141,6 +143,7 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     analyzeScreens: "Analyze captures",
     analyzing: "Analyzing...",
     captureLimitReached: "Limit of 4 captures reached",
+    themeGlass: "Glass",
     promptPlaceholder:
       "Analyze the screenshot and solve the technical problem shown step by step, explaining the logic.",
   },
