@@ -6,13 +6,13 @@ import { useTranslation } from "../hooks/useTranslation";
 
 const statusConfig: Record<Status, { labelKey: string; color: string; pulse: boolean; showMic: boolean }> = {
   idle: { labelKey: "statusDisconnected", color: "bg-gray-500", pulse: false, showMic: false },
-  connected: { labelKey: "statusReady", color: "bg-green-500", pulse: false, showMic: false },
-  listening: { labelKey: "statusListening", color: "bg-green-500", pulse: true, showMic: true },
-  thinking: { labelKey: "statusThinking", color: "bg-green-500", pulse: true, showMic: true },
-  responding: { labelKey: "statusResponding", color: "bg-green-500", pulse: false, showMic: true },
-  paused: { labelKey: "statusPaused", color: "bg-orange-500", pulse: false, showMic: false },
-  reconnecting: { labelKey: "statusReconnecting", color: "bg-yellow-500", pulse: true, showMic: false },
-  capturing: { labelKey: "statusCapturing", color: "bg-green-500", pulse: true, showMic: false },
+  connected: { labelKey: "statusReady", color: "bg-accent", pulse: false, showMic: false },
+  listening: { labelKey: "statusListening", color: "bg-accent", pulse: true, showMic: true },
+  thinking: { labelKey: "statusThinking", color: "bg-accent", pulse: true, showMic: true },
+  responding: { labelKey: "statusResponding", color: "bg-accent", pulse: false, showMic: true },
+  paused: { labelKey: "statusPaused", color: "bg-amber", pulse: false, showMic: false },
+  reconnecting: { labelKey: "statusReconnecting", color: "bg-amber", pulse: true, showMic: false },
+  capturing: { labelKey: "statusCapturing", color: "bg-accent", pulse: true, showMic: false },
   error: { labelKey: "statusDisconnected", color: "bg-red-500", pulse: false, showMic: false },
 };
 
@@ -35,8 +35,8 @@ export default function StatusBar({ onChangeLanguage, onToggleScreenPanel }: Sta
     <div data-tauri-drag-region className="flex items-center justify-between px-3 py-2.5 w-full gap-2">
       <div className="flex items-center gap-3 shrink-0">
         <div className="flex items-center gap-2">
-          <div className="border-1 border-solid p-1 border-green-500/30 bg-green-500/10 rounded-xl">
-            <Bot className="text-green-500" size={20} />
+          <div className="border-1 border-solid p-1 border-accent-border bg-accent-soft-2 rounded-xl">
+            <Bot className="text-accent" size={20} />
           </div>
           <span className="text-white font-semibold text-xs">InterviewCopilot</span>
         </div>
@@ -61,7 +61,7 @@ export default function StatusBar({ onChangeLanguage, onToggleScreenPanel }: Sta
             onClick={onToggleScreenPanel}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full transition-all cursor-pointer ${
               screenPanelOpen
-                ? "bg-green-500/15 border border-green-500/30 text-green-400"
+                ? "bg-accent-soft border border-accent-border text-accent"
                 : "border border-white/10 bg-white/5 hover:bg-white/10 text-white/60 hover:text-white"
             }`}
             //title={t("screenReader")}
@@ -76,12 +76,12 @@ export default function StatusBar({ onChangeLanguage, onToggleScreenPanel }: Sta
       <div className="flex items-center gap-1.5 shrink-0">
         {/* Stealth indicators */}
         {ghostMode && (
-          <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 animate-pulse">
+          <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-danger-soft text-danger border border-danger/30 animate-pulse">
             {t("ghostModeOn")}
           </span>
         )}
         {contentProtected && (
-          <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-green-500/20 text-green-400 border border-green-500/30">
+          <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-accent-soft text-accent border border-accent-border">
             {t("contentProtected")}
           </span>
         )}
@@ -94,11 +94,11 @@ export default function StatusBar({ onChangeLanguage, onToggleScreenPanel }: Sta
             className={`relative inline-flex h-2 w-2 rounded-full ${config.color}`}
           />
         </span>
-        <span className={`text-xs font-medium ${status === "error" ? "text-red-400" : "text-white/70"}`}>
+        <span className={`text-xs font-medium ${status === "error" ? "text-danger" : "text-white/70"}`}>
           {t(config.labelKey as Parameters<typeof t>[0])}
         </span>
         {config.showMic && (
-          <svg className="w-3.5 h-3.5 text-green-400 animate-pulse" viewBox="0 0 24 24" fill="currentColor">
+          <svg className="w-3.5 h-3.5 text-accent animate-pulse" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
             <path d="M19 10v2a7 7 0 0 1-14 0v-2" fill="none" stroke="currentColor" strokeWidth="2" />
             <line x1="12" y1="19" x2="12" y2="23" stroke="currentColor" strokeWidth="2" />
@@ -107,7 +107,7 @@ export default function StatusBar({ onChangeLanguage, onToggleScreenPanel }: Sta
         )}
       </div>
       {error && (
-        <span className="text-red-400 truncate max-w-[120px] text-xs">
+        <span className="text-danger truncate max-w-[120px] text-xs">
           {error}
         </span>
       )}

@@ -57,10 +57,10 @@ export default function Overlay({
   const bgClass = isLiquid ? "glass-base" : "bg-black/60 backdrop-blur-xl";
   
   const borderClass = ghostMode
-    ? "border-cyan-400/50"
+    ? "border-danger/50"
     : isLiquid 
-      ? (isActive ? "border-green-400/60" : "")
-      : (isActive ? "border-green-500/30" : "border-white/10");
+      ? (isActive ? "border-accent/60" : "")
+      : (isActive ? "border-accent-border" : "border-white/10");
 
   const auraClass = isActive 
     ? (isLiquid ? "liquid-aura-active" : "aura-active") 

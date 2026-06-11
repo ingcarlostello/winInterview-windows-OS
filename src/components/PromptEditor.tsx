@@ -72,7 +72,7 @@ export default function PromptEditor({ onSave, onRestore, onConnect }: PromptEdi
           <Sliders size={11} />
           {t("customContext")}
           {customPrompts[language]?.trim() && (
-            <span className="text-[9px] text-green-400/70 ml-1">
+              <span className="text-[9px] text-accent/70 ml-1">
               {t("activePromptIndicator")}
             </span>
           )}
@@ -86,7 +86,7 @@ export default function PromptEditor({ onSave, onRestore, onConnect }: PromptEdi
         </button>
       </div>
       <div className={`bg-white/5 border rounded-lg p-2 transition-colors ${
-        customPrompts[language]?.trim() ? "border-green-500/30" : "border-white/10"
+        customPrompts[language]?.trim() ? "border-accent-border" : "border-white/10"
       }`}>
         <textarea
           value={draft}
@@ -103,8 +103,8 @@ export default function PromptEditor({ onSave, onRestore, onConnect }: PromptEdi
               theme === "liquid"
                 ? "glass-button disabled:opacity-40 disabled:cursor-not-allowed"
                 : saved
-                  ? "bg-green-500/30 text-green-400"
-                  : "bg-green-500/20 border border-green-500/30 text-green-400 hover:bg-green-500/40 disabled:opacity-40 disabled:cursor-not-allowed"
+                  ? "bg-accent/30 text-accent"
+                  : "bg-accent-soft border border-accent-border text-accent hover:bg-accent/40 disabled:opacity-40 disabled:cursor-not-allowed"
             }`}
           >
             <Check size={10} />
