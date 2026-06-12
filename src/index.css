@@ -95,6 +95,22 @@
     inset 0 0 24px rgb(120 160 255 / 0.06);
 }
 
+@utility glass-button-danger {
+  background: rgb(239 68 68 / 0.18);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgb(239 68 68 / 0.35);
+  color: #f87171;
+  cursor: pointer;
+  transition: all 200ms var(--ease-glass, cubic-bezier(0, 0, 0.2, 1));
+
+  &:hover {
+    background: rgb(239 68 68 / 0.28);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 14px rgb(239 68 68 / 0.20);
+  }
+}
+
 @utility glass-ghost-active {
   box-shadow:
     0 0 12px var(--color-danger-soft),
@@ -170,4 +186,57 @@
       0 0 50px var(--color-danger-soft),
       inset 0 0 20px var(--color-danger-soft);
   }
+}
+
+/* Screen capture scan animation */
+@layer components {
+  .scan-line {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .scan-line::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 100%;
+    background: linear-gradient(
+      to bottom,
+      transparent 0%,
+      transparent 50%,
+      rgba(132, 204, 22, 0.25) 62%,
+      rgba(190, 242, 100, 0.85) 72%,
+      rgba(217, 249, 157, 0.95) 78%,
+      rgba(190, 242, 100, 0.85) 84%,
+      rgba(132, 204, 22, 0.25) 94%,
+      transparent 100%
+    );
+    filter: blur(2px);
+    animation: scan-vertical 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    pointer-events: none;
+  }
+}
+
+@keyframes scan-vertical {
+  0% {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+}
+
+/* Screen panel slide easing */
+@utility ease-slide {
+  transition-timing-function: cubic-bezier(0.250, 0.460, 0.450, 0.940);
 }
