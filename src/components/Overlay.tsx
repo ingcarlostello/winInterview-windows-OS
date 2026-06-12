@@ -36,56 +36,77 @@ export default function Overlay({
   const setContentProtected = useInterviewStore((s) => s.setContentProtected);
   const theme = useInterviewStore((s) => s.theme);
   const screenPanelOpen = useInterviewStore((s) => s.screenPanelOpen);
-  const isActive = status === "listening" || status === "thinking" || status === "responding";
+  const isActive =
+    status === "listening" || status === "thinking" || status === "responding";
 
   // Listen for Tauri events from the Rust layer
   useEffect(() => {
     const unlistenGhost = listen<boolean>("ghost-mode-changed", (event) => {
       setGhostMode(event.payload);
     });
-    const unlistenProtect = listen<boolean>("content-protected-changed", (event) => {
-      setContentProtected(event.payload);
-    });
+    const unlistenProtect = listen<boolean>(
+      "content-protected-changed",
+      (event) => {
+        setContentProtected(event.payload);
+      },
+    );
     return () => {
       unlistenGhost.then((fn) => fn());
       unlistenProtect.then((fn) => fn());
     };
   }, [setGhostMode, setContentProtected]);
 
-const isGlass = theme === "glass";
+  const isGlass = theme === "glass";
 
   const bgClass = isGlass ? "glass-bg" : "bg-black/60 backdrop-blur-xl";
-  
+
   const borderClass = ghostMode
     ? "border-danger/50"
-    : isGlass 
-      ? (isActive ? "border-accent/60" : "")
-      : (isActive ? "border-accent-border" : "border-white/10");
+    : isGlass
+      ? isActive
+        ? "border-accent/60"
+        : ""
+      : isActive
+        ? "border-accent-border"
+        : "border-white/10";
 
-  const auraClass = isActive 
-    ? (isGlass ? "glass-aura-active" : "aura-active") 
-    : (isGlass && !ghostMode ? "glass-aura-idle" : "");
+  const auraClass = isActive
+    ? isGlass
+      ? "glass-aura-active"
+      : "aura-active"
+    : isGlass && !ghostMode
+      ? "glass-aura-idle"
+      : "";
 
   return (
-    <div data-theme={theme} className={`shadow-[0px_8px_48px_-8px_rgba(120,160,255,0.2),0px_2px_16px_rgba(255,255,255,0.06)] h-full w-full flex flex-row ${bgClass} rounded-2xl border shadow-2xl transition-all duration-500 ${borderClass} ${auraClass} ${ghostMode ? "ghost-active" : ""}`}>
-      <div className={`flex flex-col h-full ${screenPanelOpen ? "w-[730px]" : "w-full"} flex-shrink-0 transition-all duration-300`}>
-        <StatusBar onChangeLanguage={onChangeLanguage} onToggleScreenPanel={onToggleScreenPanel} />
+    <div data-theme={theme} className={`shadow-[0px_8px_48px_-8px_rgba(120,160,255,0.2),0px_2px_16px_rgba(255,255,255,0.06)] h-full flex flex-row ${bgClass} rounded-2xl border shadow-2xl transition-all duration-500 ${borderClass} ${auraClass} ${ghostMode ? "ghost-active" : ""} ${screenPanelOpen ? "w-[1200px]" : "w-[730px]"}`}>
+      <div className="flex flex-col h-full w-[730px] flex-shrink-0">
+        <StatusBar
+          onChangeLanguage={onChangeLanguage}
+          onToggleScreenPanel={onToggleScreenPanel}
+        />
         <div className="border-b border-white/10" />
-        <Controls onPause={onPause} onResume={onResume} onConnect={onConnect} onDisconnect={onDisconnect} />
+        <Controls
+          onPause={onPause}
+          onResume={onResume}
+          onConnect={onConnect}
+          onDisconnect={onDisconnect}
+        />
         <div className="border-b border-white/10 mx-3" />
-        <PromptEditor onSave={onSavePrompt} onRestore={onRestorePrompt} onConnect={onConnect} />
+        <PromptEditor
+          onSave={onSavePrompt}
+          onRestore={onRestorePrompt}
+          onConnect={onConnect}
+        />
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden pt-2">
           <Transcription />
           <Response />
         </div>
         <QuestionCounter />
       </div>
-      {screenPanelOpen && (
-        <div className="flex-1 min-w-0">
-          <ScreenPanel />
-        </div>
-      )}
+      <div className={`transition-all duration-500 ease-slide overflow-hidden ${screenPanelOpen ? "flex-1 min-w-0" : "w-0 flex-shrink-0"}`}>
+        <ScreenPanel />
+      </div>
     </div>
   );
 }
-

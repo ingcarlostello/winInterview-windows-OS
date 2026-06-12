@@ -25,6 +25,7 @@ export default function ScreenPanel() {
   const setIsAnalyzingScreen = useInterviewStore((s) => s.setIsAnalyzingScreen);
   const setScreenPrompt = useInterviewStore((s) => s.setScreenPrompt);
   const canCaptureScreen = useInterviewStore((s) => s.canCaptureScreen);
+  const screenPanelOpen = useInterviewStore((s) => s.screenPanelOpen);
 
   const wsRef = useRef<WebSocket | null>(null);
   const { t } = useTranslation();
@@ -135,104 +136,115 @@ export default function ScreenPanel() {
       <div className="border-b border-white/10" />
 
       {/* Capture Thumbnails */}
-      {hasCaptures && (
-        <div className="flex items-center gap-2 px-3 py-2 shrink-0 overflow-x-auto">
-          {screenImages.map((image, index) => (
-            <div
-              key={index}
-              className="w-[120px] h-[120px] rounded-lg overflow-hidden border border-white/15 bg-black/20 shrink-0"
-            >
-              <img
-                src={`data:image/png;base64,${image}`}
-                alt={`Captura ${index + 1}`}
-                className="w-full h-full object-cover"
-              />
-            </div>
-          ))}
-          {Array.from({ length: MAX_CAPTURES - screenImages.length }).map(
-            (_, index) => (
+      <div className={`grid transition-[grid-template-rows] duration-300 ease-out ${hasCaptures ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
+        <div className="overflow-hidden">
+          <div className="flex items-center gap-2 px-3 py-2 shrink-0 overflow-x-auto">
+            {screenImages.map((image, index) => (
               <div
-                key={`empty-${index}`}
-                className="w-[120px] h-[120px] rounded-lg bg-white/5 border border-white/10 shrink-0"
-              />
-            )
-          )}
+                key={index}
+                className="scan-line w-[120px] h-[120px] rounded-lg overflow-hidden border border-white/15 bg-black/20 shrink-0"
+              >
+                <img
+                  src={`data:image/png;base64,${image}`}
+                  alt={`Captura ${index + 1}`}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            ))}
+            {Array.from({ length: MAX_CAPTURES - screenImages.length }).map(
+              (_, index) => (
+                <div
+                  key={`empty-${index}`}
+                  className="w-[120px] h-[120px] rounded-lg bg-white/5 border border-white/10 shrink-0"
+                />
+              )
+            )}
+          </div>
         </div>
-      )}
+      </div>
+
 
       {/* Body */}
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden px-3 py-3 gap-3">
-        {/* Capture Area - inline horizontal */}
-        {!hasAnalysis && (
-          <div className="shrink-0">
-            {isCapturingScreen ? (
-              <div className="flex items-center gap-2 text-accent text-xs py-2">
-                <RefreshCw size={12} className="animate-spin" />
-                <span>{t("capturing")}</span>
+        {/* Capture Area - centered card */}
+        {!hasAnalysis && !hasCaptures && (
+          <div className={`flex-1 flex items-center justify-center min-h-0 transition-opacity duration-300 ${screenPanelOpen ? "opacity-100 delay-150" : "opacity-0"}`}>
+            <div className="flex flex-col items-center gap-3 p-6 rounded-2xl border border-white/10 bg-black/20 w-[260px] text-center">
+              <div className="w-10 h-10 rounded-lg border border-white/15 bg-white/5 flex items-center justify-center">
+                <Camera size={18} className="text-white/60" />
               </div>
-            ) : (
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-white/30 text-xs">
-                  {t("noScreenCapture")}
-                </span>
-                <div className="flex flex-col items-end gap-1">
-                  <button
-                    onClick={handleCapture}
-                    disabled={!canCapture}
-                    className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-accent-soft border border-accent-border text-accent text-xs font-medium hover:bg-accent/25 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
+              <h3 className="text-white text-xs font-semibold leading-tight whitespace-nowrap">
+                {t("noScreenCapture")}
+              </h3>
+              <p className="text-white/50 text-[10px] leading-relaxed">
+                {t("screenCaptureDescription")}
+              </p>
+              <button
+                onClick={handleCapture}
+                disabled={!canCapture || isCapturingScreen}
+                className="mt-1 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-accent text-black text-xs font-semibold hover:brightness-110 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isCapturingScreen ? (
+                  <>
+                    <RefreshCw size={12} className="animate-spin" />
+                    {t("capturing")}
+                  </>
+                ) : (
+                  <>
                     <Camera size={12} />
-                    {t("captureScreen")}
-                  </button>
-                  {!canCapture && (
-                      <span className="text-accent/60 text-[10px]">
-                      {t("captureLimitReached")}
-                    </span>
-                  )}
-                </div>
-              </div>
-            )}
+                    {t("screenCaptureButton")}
+                  </>
+                )}
+              </button>
+              {!canCapture && (
+                <span className="text-accent/60 text-[10px]">
+                  {t("captureLimitReached")}
+                </span>
+              )}
+            </div>
           </div>
         )}
 
         {/* Prompt Section - glass container */}
-        {hasCaptures && !hasAnalysis && (
-          <div className="flex flex-col gap-2 shrink-0">
-            <div className="flex items-center gap-1.5">
-              <Sparkles className="text-accent" size={12} />
-              <span className="text-accent text-[10px] font-semibold uppercase tracking-wider">
-                {t("promptForLLM")}
-              </span>
-            </div>
-            <div className="border border-white/10 rounded-xl overflow-hidden">
-              <textarea
-                value={screenPrompt}
-                onChange={(e) => setScreenPrompt(e.target.value)}
-                placeholder={t("promptPlaceholder")}
-                className="w-full min-h-[80px] bg-black/20 px-3 py-2 text-white text-xs resize-y focus:outline-none focus:bg-black/30 transition-colors"
-              />
-              <div className="border-t border-white/10 px-3 py-2 flex justify-end">
-                <button
-                  onClick={handleAnalyze}
-                  disabled={isAnalyzingScreen}
-                  className="flex items-center gap-2 px-4 py-1.5 rounded-lg bg-accent/20 border border-accent-border text-accent text-xs font-medium hover:bg-accent/30 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isAnalyzingScreen ? (
-                    <>
-                      <RefreshCw size={12} className="animate-spin" />
-                      {t("analyzing")}
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles size={12} />
-                      {t("analyzeScreens")}
-                    </>
-                  )}
-                </button>
+        <div className={`grid transition-[grid-template-rows] duration-300 ease-out ${hasCaptures && !hasAnalysis ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
+          <div className="overflow-hidden">
+            <div className="flex flex-col gap-2 shrink-0">
+              <div className="flex items-center gap-1.5">
+                <Sparkles className="text-accent" size={12} />
+                <span className="text-accent text-[10px] font-semibold uppercase tracking-wider">
+                  {t("promptForLLM")}
+                </span>
+              </div>
+              <div className="border border-white/10 rounded-xl overflow-hidden">
+                <textarea
+                  value={screenPrompt}
+                  onChange={(e) => setScreenPrompt(e.target.value)}
+                  placeholder={t("promptPlaceholder")}
+                  className="w-full min-h-[80px] bg-black/20 px-3 py-2 text-white text-xs resize-y focus:outline-none focus:bg-black/30 transition-colors"
+                />
+                <div className="border-t border-white/10 px-3 py-2 flex justify-end">
+                  <button
+                    onClick={handleAnalyze}
+                    disabled={isAnalyzingScreen}
+                    className="flex items-center gap-2 px-4 py-1.5 rounded-lg bg-accent/20 border border-accent-border text-accent text-xs font-medium hover:bg-accent/30 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isAnalyzingScreen ? (
+                      <>
+                        <RefreshCw size={12} className="animate-spin" />
+                        {t("analyzing")}
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles size={12} />
+                        {t("analyzeScreens")}
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        )}
+        </div>
 
         {/* Solution Section - glass container */}
         {hasAnalysis && (

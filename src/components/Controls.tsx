@@ -1,4 +1,4 @@
-import { Mic, Pause, Play, Square, Eye, EyeOff } from "lucide-react";
+import { Mic, Pause, Play, Eye, EyeOff } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useInterviewStore } from "../stores/interview";
 import { useTranslation } from "../hooks/useTranslation";
@@ -89,13 +89,17 @@ export default function Controls({
             <button
               type="button"
               onClick={onDisconnect}
-              className={`flex items-center gap-1.5 px-3 py-1.5 mt-3 mb-1 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 mt-3 mb-1 text-xs font-bold rounded-xl transition-colors cursor-pointer ${
                 theme === "glass"
-                  ? "glass-button-active"
-                  : "border border-red/30 text-red-400 bg-red-500/20 hover:bg-red-500/50"
+                  ? "glass-button-danger"
+                  : "border border-red/30 bg-red-500/20 text-red-400 hover:bg-red-500/30"
               }`}
             >
-              <Square size={13} />
+              <span className="flex items-center gap-0.5">
+                <span className="w-0.5 h-2.5 bg-current rounded-full" />
+                <span className="w-0.5 h-3.5 bg-current rounded-full" />
+                <span className="w-0.5 h-2.5 bg-current rounded-full" />
+              </span>
               {t("btnEnd")}
             </button>
           </>

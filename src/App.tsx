@@ -41,7 +41,17 @@ export default function App() {
     const isOpen = !useInterviewStore.getState().screenPanelOpen;
     useInterviewStore.getState().setScreenPanelOpen(isOpen);
     try {
-      await invoke("set_window_expanded", { expanded: isOpen });
+      if (isOpen) {
+        await invoke("set_window_expanded", { expanded: true });
+      } else {
+        setTimeout(async () => {
+          try {
+            await invoke("set_window_expanded", { expanded: false });
+          } catch {
+            // best-effort
+          }
+        }, 500);
+      }
     } catch {
       // Window resize is best-effort
     }

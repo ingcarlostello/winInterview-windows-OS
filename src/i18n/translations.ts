@@ -41,12 +41,25 @@ export type TranslationKey =
   | "capturing"
   | "solution"
   | "noScreenCapture"
+  | "screenCaptureDescription"
+  | "screenCaptureButton"
   | "promptForLLM"
   | "analyzeScreens"
   | "analyzing"
   | "captureLimitReached"
   | "promptPlaceholder"
-  | "themeGlass";
+  | "themeGlass"
+  | "ghostModeInvisibleOn"
+  | "ghostModeInvisibleOff"
+  | "waitingQuestion"
+  | "pressListenToStart"
+  | "copilotReady"
+  | "copilotReadyDesc"
+  | "charsBadge"
+  | "badgeReady"
+  | "badgeListening"
+  | "badgeThinking"
+  | "badgeResponding";
 
 const translations: Record<Language, Record<TranslationKey, string>> = {
   es: {
@@ -90,13 +103,27 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     capturing: "Capturando...",
     solution: "Solución",
     noScreenCapture: "Captura una pantalla para analizar",
+    screenCaptureDescription:
+      "El analizador detectará diagramas, código y whiteboards que el entrevistador comparta.",
+    screenCaptureButton: "Capturar pantalla",
     promptForLLM: "PROMPT PARA EL LLM",
     analyzeScreens: "Analizar capturas",
     analyzing: "Analizando...",
     captureLimitReached: "Límite de 4 capturas alcanzado",
     themeGlass: "Glass",
+    ghostModeInvisibleOn: "INVISIBLE: ON",
+    ghostModeInvisibleOff: "INVISIBLE: OFF",
     promptPlaceholder:
       "Analiza la captura de pantalla y resuelve el problema técnico mostrado paso a paso, explicando la lógica.",
+    waitingQuestion: "Esperando pregunta del entrevistador",
+    pressListenToStart: "PRESIONA ESCUCHAR PARA COMENZAR",
+    copilotReady: "El copiloto está listo",
+    copilotReadyDesc: "Cuando detecte una pregunta, generará una respuesta estructurada con código y explicación en menos de 2 segundos.",
+    charsBadge: "{count} CHARS",
+    badgeReady: "LISTO",
+    badgeListening: "ESCUCHANDO",
+    badgeThinking: "PENSANDO",
+    badgeResponding: "RESPONDIENDO",
   },
   en: {
     statusDisconnected: "Disconnected",
@@ -139,13 +166,27 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     capturing: "Capturing...",
     solution: "Solution",
     noScreenCapture: "Capture a screen to analyze",
+    screenCaptureDescription:
+      "The analyzer will detect diagrams, code and whiteboards shared by the interviewer.",
+    screenCaptureButton: "Capture screen",
     promptForLLM: "PROMPT FOR THE LLM",
     analyzeScreens: "Analyze captures",
     analyzing: "Analyzing...",
     captureLimitReached: "Limit of 4 captures reached",
     themeGlass: "Glass",
+    ghostModeInvisibleOn: "INVISIBLE: ON",
+    ghostModeInvisibleOff: "INVISIBLE: OFF",
     promptPlaceholder:
       "Analyze the screenshot and solve the technical problem shown step by step, explaining the logic.",
+    waitingQuestion: "Waiting for interviewer question",
+    pressListenToStart: "PRESS LISTEN TO START",
+    copilotReady: "The copilot is ready",
+    copilotReadyDesc: "When it detects a question, it will generate a structured response with code and explanation in less than 2 seconds.",
+    charsBadge: "{count} CHARS",
+    badgeReady: "READY",
+    badgeListening: "LISTENING",
+    badgeThinking: "THINKING",
+    badgeResponding: "RESPONDING",
   },
 };
 

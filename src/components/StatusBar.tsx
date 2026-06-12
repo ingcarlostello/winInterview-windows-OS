@@ -1,4 +1,4 @@
-import { Bot, Layers, Monitor, Minus, X } from "lucide-react";
+import { Bot, Eye, Layers, Monitor, Minus, X } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useInterviewStore } from "../stores/interview";
 import type { Status } from "../stores/interview";
@@ -164,14 +164,21 @@ export default function StatusBar({ onChangeLanguage, onToggleScreenPanel }: Sta
 
         <div className="flex items-center gap-1.5 shrink-0">
           {ghostMode && (
-            <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-danger-soft text-danger border border-danger/30 animate-pulse">
-              {t("ghostModeOn")}
-            </span>
-          )}
-          {contentProtected && (
-            <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-accent-soft text-accent border border-accent-border">
-              {t("contentProtected")}
-            </span>
+            <div className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl border transition-colors ${
+              contentProtected
+                ? "bg-danger-soft/50 border-danger/20"
+                : "bg-white/5 border-white/10"
+            }`}>
+              <Eye size={14} className={contentProtected ? "text-danger" : "text-white/40"} />
+              <div>
+                <div className={`text-[10px] font-medium leading-tight ${contentProtected ? "text-danger" : "text-white/60"}`}>
+                  {t("ghostModeOn")}
+                </div>
+                <div className={`text-[9px] leading-tight ${contentProtected ? "text-danger/60" : "text-white/30"}`}>
+                  {contentProtected ? t("ghostModeInvisibleOn") : t("ghostModeInvisibleOff")}
+                </div>
+              </div>
+            </div>
           )}
           <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors ${config.pillStyle}`}>
             <span className="relative flex h-2 w-2">
