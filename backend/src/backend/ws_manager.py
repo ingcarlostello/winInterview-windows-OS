@@ -2,6 +2,8 @@ import json
 
 from fastapi import WebSocket
 
+from backend.ws.message_types import WsMessageType, WsStatus
+
 
 class ConnectionManager:
     def __init__(self):
@@ -25,23 +27,23 @@ class ConnectionManager:
             except Exception:
                 pass
 
-    async def send_status(self, session_id: str, status: str) -> None:
-        await self.send(session_id, "status", {"status": status})
+    async def send_status(self, session_id: str, status: WsStatus) -> None:
+        await self.send(session_id, WsMessageType.STATUS, {"status": status})
 
     async def send_transcription(self, session_id: str, text: str) -> None:
-        await self.send(session_id, "transcription", {"text": text})
+        await self.send(session_id, WsMessageType.TRANSCRIPTION, {"text": text})
 
     async def send_response_chunk(self, session_id: str, chunk: str) -> None:
-        await self.send(session_id, "chunk", {"content": chunk})
+        await self.send(session_id, WsMessageType.CHUNK, {"content": chunk})
 
     async def send_error(self, session_id: str, error: str) -> None:
-        await self.send(session_id, "error", {"message": error})
+        await self.send(session_id, WsMessageType.ERROR, {"message": error})
 
     async def send_screen_chunk(self, session_id: str, chunk: str) -> None:
-        await self.send(session_id, "screen_chunk", {"content": chunk})
+        await self.send(session_id, WsMessageType.SCREEN_CHUNK, {"content": chunk})
 
     async def send_screen_image(self, session_id: str, image_base64: str) -> None:
-        await self.send(session_id, "screen_image", {"image": image_base64})
+        await self.send(session_id, WsMessageType.SCREEN_IMAGE, {"image": image_base64})
 
     @property
     def active_count(self) -> int:

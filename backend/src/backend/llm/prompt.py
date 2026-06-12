@@ -179,24 +179,3 @@ def get_active_prompt_info(language: str) -> dict:
         "custom_prompt": custom.get(language, ""),
         "default_prompt": DEFAULT_PROMPT_ES if language == "es" else DEFAULT_PROMPT_EN,
     }
-
-
-class PromptBuilder:
-    def __init__(self):
-        pass
-
-    def build_messages(
-        self, context: list[dict[str, str]], current_question: str
-    ) -> list[dict[str, str]]:
-        messages: list[dict[str, str]] = [
-            {"role": "system", "content": get_system_prompt()},
-        ]
-
-        for msg in context:
-            messages.append({"role": msg["role"], "content": msg["content"]})
-
-        messages.append(
-            {"role": "user", "content": f"Pregunta del entrevistador: {current_question}"}
-        )
-
-        return messages

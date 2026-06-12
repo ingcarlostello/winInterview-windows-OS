@@ -141,42 +141,52 @@ Actions: `setStatus`, `setLanguage`, `setTranscription`, `addResponseChunk`, `cl
 
 **Key patterns**:
 - Deepgram Agent handles VAD and ASR only (no LLM)
-- LLM streaming via NVIDIA API (Gemma 3n) — separate from Deepgram
+- `AudioStreamingService` encapsulates the full audio pipeline (PyAudio + Deepgram) with callback-based async bridging
+- `ConversationHistory` manages the message list with system prompt preservation and auto-trimming at 20 messages
+- LLM streaming via DeepSeek API (deepseek-v4-flash) — separate from Deepgram
 - Vision analysis via DashScope/Aliyun (Qwen) — separate WebSocket endpoint
 - Audio captured via PyAudio (16kHz, 16-bit, mono) and streamed directly to Deepgram (no webrtcvad)
 - `asyncio.run_coroutine_threadsafe` bridges sync Deepgram callbacks to async event loop
 - Agent runs in separate thread to avoid blocking the async WebSocket handler
 - Dependency injection via `@lru_cache` singletons in `dependencies.py`
+- `AgentSession` constructor accepts optional `audio_service`, `history`, `screen_capture` for test injection
+- `CommandParser` uses registry-based handler pattern (open/closed for new commands)
 
 ### Modules
 
 | Module | Purpose |
 |---|---|
 | `config.py` | Pydantic settings: `deepgram_api_key`, `nvidia_api_key`, `dashscope_api_key`, `host`, `port` |
-| `context.py` | `ConversationContext` (deque-based, maxlen=10). **Unused** — imported nowhere |
-| `dependencies.py` | DI singletons: `get_connection_manager()`, `get_llm_service()` (NvidiaLLMService), `get_vision_service()` (VisionLLMService) |
-| `ws_manager.py` | `ConnectionManager` with typed sends: `send_status`, `send_transcription`, `send_response_chunk`, `send_error`, `send_screen_chunk`, `send_screen_image` |
-| `ws/handler.py` | `websocket_endpoint` FastAPI handler. Creates `AgentSession` with language/prompt from query params |
-| `ws/session.py` | `AgentSession` class (270 lines). Core session logic: manages Deepgram agent, audio capture, conversation history (max 20 messages), screen capture, LLM streaming. Commands: pause, resume, clear, set_language, set_prompt, clear_prompt, capture_screen |
-| `ws/commands.py` | `WsCommand` enum: PAUSE, RESUME, CLEAR, SET_LANGUAGE, SET_PROMPT, CLEAR_PROMPT, CAPTURE_SCREEN. `ParsedCommand` dataclass. `parse_command()` function |
+| `context.py` | `ConversationHistory` — message list management (system prompt + user/assistant messages, max 20, auto-trim). Used by `AgentSession` |
+| `dependencies.py` | DI singletons: `get_connection_manager()`, `get_llm_service()` (DeepSeekLLMService), `get_vision_service()` (VisionLLMService) |
+| `ws_manager.py` | `ConnectionManager` with typed sends using `WsMessageType`/`WsStatus` enums: `send_status`, `send_transcription`, `send_response_chunk`, `send_error`, `send_screen_chunk`, `send_screen_image` |
+| `ws/handler.py` | `websocket_endpoint` FastAPI handler. Creates `AgentSession` with language/prompt from query params. Uses `CommandParser` via `create_default_parser()` |
+| `ws/session.py` | `AgentSession` class (~192 lines). Pure coordinator: wires `AudioStreamingService` ↔ `ConversationHistory` ↔ LLM/Vision ↔ WebSocket. Accepts optional `audio_service`, `history`, `screen_capture` params for DI/testing |
+| `ws/commands.py` | `WsCommand` enum: PAUSE, RESUME, CLEAR, SET_LANGUAGE, SET_PROMPT, CLEAR_PROMPT, CAPTURE_SCREEN. `ParsedCommand` dataclass |
+| `ws/command_parser.py` | `CommandParser` with registry-based handler pattern. `ExactMatchHandler` (no-payload commands), `PrefixMatchHandler` (colon-delimited payload). `create_default_parser()` factory |
+| `ws/message_types.py` | `WsMessageType` enum (STATUS, TRANSCRIPTION, CHUNK, ERROR, SCREEN_CHUNK, SCREEN_IMAGE) and `WsStatus` enum (CONNECTED, LISTENING, THINKING, RESPONDING, PAUSED, RECONNECTING, CLEARED, CAPTURING, ANALYZING, COMPLETED, PROMPT_SAVED, PROMPT_CLEARED) |
 | `audio/capture.py` | PyAudio at 16kHz, 16-bit, mono, 20ms frames. Async capture loop with thread-safe stream access. `start()`/`stop()`/`close()` lifecycle |
+| `audio/service.py` | `AudioStreamingService` — owns PyAudio + Deepgram Agent lifecycle. Callback-driven (`on_transcription`, `on_user_started_speaking`, `on_agent_error`). Handles keepalive loop, pause/resume, language restart |
 | `agent/deepgram.py` | `DeepgramAgent` class. Wraps Deepgram SDK v7+ Agent API. `nova-3` model. `send_media()` for PCM frames. `keep_alive()` sends keepalive + dummy audio |
-| `llm/prompt.py` | Default system prompts for ES/EN. Custom prompt CRUD via `prompts.json` file. `PromptBuilder` class (unused) |
+| `llm/prompt.py` | Default system prompts for ES/EN. Custom prompt CRUD via `prompts.json` file |
 | `llm/protocol.py` | `LLMService` Protocol with `stream_response()` async iterator interface |
+| `llm/deepseek.py` | `DeepSeekLLMService` implementing `LLMService`. DeepSeek API, model `deepseek-v4-flash` |
 | `llm/nvidia.py` | `NvidiaLLMService` implementing `LLMService`. NVIDIA API (`integrate.api.nvidia.com`), model `google/gemma-3n-e4b-it`. Temperature 0.20, max_tokens 512 |
 | `llm/vision.py` | `VisionLLMService` for screen analysis. Aliyun/DashScope endpoint, model `qwen3.6-plus`. `analyze_screen()`, `analyze_multiple_screens()`. Max tokens 16384, temperature 0.60, thinking enabled |
 | `screen/capture.py` | `ScreenCapture` class (macOS only). AppleScript to get active window ID (excludes "interview-responder"), `screencapture -l` for window capture, `screencapture` for full-screen fallback |
 | `routers/prompts.py` | REST API: `GET /prompt?lang=`, `POST /prompt`, `DELETE /prompt?lang=` |
-| `routers/screens.py` | REST: `POST /api/capture-screen` returns base64 image. WebSocket: `/api/ws/analyze-screens` accepts JSON with images array + prompt, streams vision analysis chunks |
-| `stt/` | **Legacy/unused** — empty module |
+| `routers/screens.py` | REST: `POST /api/capture-screen` returns base64 image. WebSocket: `/api/ws/analyze-screens` accepts JSON with images array + prompt, streams vision analysis chunks. Uses `WsMessageType` enum |
 
 ### WebSocket Message Format
 
-All messages follow: `{"type": "...", "data": {...}}`
+All messages follow: `{"type": "...", "data": {...}}` (via `ConnectionManager`) or flat `{"type": "...", ...}` (screen analysis WebSocket, not using `ConnectionManager`).
 
-**Main WebSocket (`/ws`)** message types: `status`, `transcription`, `chunk`, `error`, `cleared`, `prompt_saved`, `prompt_cleared`
+**Message type enums** (Python: `backend.ws.message_types` — `WsMessageType`, `WsStatus`; TypeScript: `src/constants/ws.ts` — `WS_MESSAGE_TYPE`, `WS_STATUS`):
 
-**Screen analysis WebSocket (`/api/ws/analyze-screens`)** message types: `screen_chunk`, `screen_image`
+| Enum | Values |
+|---|---|
+| `WsMessageType` | `STATUS`, `TRANSCRIPTION`, `CHUNK`, `ERROR`, `SCREEN_CHUNK`, `SCREEN_IMAGE` |
+| `WsStatus` | `CONNECTED`, `LISTENING`, `THINKING`, `RESPONDING`, `PAUSED`, `RECONNECTING`, `CLEARED`, `CAPTURING`, `ANALYZING`, `COMPLETED`, `PROMPT_SAVED`, `PROMPT_CLEARED` |
 
 ## Environment
 

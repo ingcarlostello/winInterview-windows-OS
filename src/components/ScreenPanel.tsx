@@ -5,6 +5,7 @@ import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { useInterviewStore } from "../stores/interview";
 import { useTranslation } from "../hooks/useTranslation";
+import { WS_MESSAGE_TYPE, WS_STATUS } from "../constants/ws";
 import { useCallback, useRef } from "react";
 
 const MAX_CAPTURES = 4;
@@ -77,12 +78,12 @@ export default function ScreenPanel() {
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        if (data.type === "chunk") {
+        if (data.type === WS_MESSAGE_TYPE.CHUNK) {
           addScreenChunk(data.content);
-        } else if (data.type === "status" && data.status === "completed") {
+        } else if (data.type === WS_MESSAGE_TYPE.STATUS && data.status === WS_STATUS.COMPLETED) {
           setIsAnalyzingScreen(false);
           ws.close();
-        } else if (data.type === "error") {
+        } else if (data.type === WS_MESSAGE_TYPE.ERROR) {
           console.error("Analysis error:", data.message);
           setIsAnalyzingScreen(false);
           ws.close();
@@ -258,7 +259,7 @@ export default function ScreenPanel() {
 
             <div className="flex-1 border border-white/10 rounded-xl overflow-hidden min-h-0">
               <div className="h-full overflow-y-auto scrollbar-thin p-3">
-                <div className="text-white/85 text-xs leading-relaxed prose prose-invert prose-xs max-w-none">
+                <div className="text-white/85 text-xs leading-relaxed prose prose-invert prose-xs max-w-none mb-12">
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
                     components={{

@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from backend.screen.capture import ScreenCapture
 from backend.dependencies import get_vision_service
+from backend.ws.message_types import WsMessageType
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +46,7 @@ async def analyze_screens_ws(websocket: WebSocket):
 
         if not images:
             await websocket.send_json({
-                "type": "error",
+                "type": WsMessageType.ERROR,
                 "message": "No images provided"
             })
             return
@@ -53,7 +54,7 @@ async def analyze_screens_ws(websocket: WebSocket):
         vision_service = get_vision_service()
 
         await websocket.send_json({
-            "type": "status",
+            "type": WsMessageType.STATUS,
             "status": "analyzing"
         })
 
@@ -61,12 +62,12 @@ async def analyze_screens_ws(websocket: WebSocket):
             images, prompt, session_id
         ):
             await websocket.send_json({
-                "type": "chunk",
+                "type": WsMessageType.CHUNK,
                 "content": chunk
             })
 
         await websocket.send_json({
-            "type": "status",
+            "type": WsMessageType.STATUS,
             "status": "completed"
         })
 
@@ -76,7 +77,7 @@ async def analyze_screens_ws(websocket: WebSocket):
         logger.error(f"Screen analysis error: {e}", exc_info=True)
         try:
             await websocket.send_json({
-                "type": "error",
+                "type": WsMessageType.ERROR,
                 "message": str(e)
             })
         except Exception:
