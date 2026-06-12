@@ -6,6 +6,7 @@ class Settings(BaseSettings):
 
     deepgram_api_key: str = ""
     nvidia_api_key: str = ""
+    deepseek_api_key: str = ""
     dashscope_api_key: str = ""
     host: str = "0.0.0.0"
     port: int = 8000
