@@ -137,7 +137,7 @@ class AgentSession:
 
         self.history.add_user_message(text)
 
-        response_text = ""
+        response_chunks = []
         first_chunk = True
 
         try:
@@ -145,10 +145,10 @@ class AgentSession:
                 if first_chunk:
                     await self.manager.send_status(self.session_id, WsStatus.RESPONDING)
                     first_chunk = False
-                response_text += chunk
+                response_chunks.append(chunk)
                 await self.manager.send_response_chunk(self.session_id, chunk)
 
-            self.history.add_assistant_message(response_text)
+            self.history.add_assistant_message("".join(response_chunks))
         except Exception as e:
             logger.exception("LLM streaming failed for session %s", self.session_id)
             await self.manager.send_error(self.session_id, str(e))
