@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import { useInterviewStore } from "../stores/interview";
 import type { Status } from "../stores/interview";
+import { WS_MESSAGE_TYPE, WS_STATUS } from "../constants/ws";
 
 const WS_BASE = "ws://localhost:8000/ws";
 
@@ -67,26 +68,26 @@ export function useWebSocket() {
         const msg: WSMessage = JSON.parse(event.data);
 
         switch (msg.type) {
-          case "status": {
+          case WS_MESSAGE_TYPE.STATUS: {
             const rawStatus = msg.data.status;
 
-            if (rawStatus === "cleared") {
+            if (rawStatus === WS_STATUS.CLEARED) {
               clearAll();
               break;
             }
 
-            if (rawStatus === "prompt_saved" || rawStatus === "prompt_cleared") {
+            if (rawStatus === WS_STATUS.PROMPT_SAVED || rawStatus === WS_STATUS.PROMPT_CLEARED) {
               break;
             }
 
             const statusMap: Record<string, Status> = {
-              connected: "connected",
-              listening: "listening",
-              thinking: "thinking",
-              responding: "responding",
-              paused: "paused",
-              reconnecting: "reconnecting",
-              capturing: "capturing",
+              [WS_STATUS.CONNECTED]: "connected",
+              [WS_STATUS.LISTENING]: "listening",
+              [WS_STATUS.THINKING]: "thinking",
+              [WS_STATUS.RESPONDING]: "responding",
+              [WS_STATUS.PAUSED]: "paused",
+              [WS_STATUS.RECONNECTING]: "reconnecting",
+              [WS_STATUS.CAPTURING]: "capturing",
             };
             const status = statusMap[rawStatus] || "idle";
 
@@ -97,18 +98,18 @@ export function useWebSocket() {
 
             setStatus(status);
 
-            if (rawStatus === "thinking") {
+            if (rawStatus === WS_STATUS.THINKING) {
               clearResponse();
             }
             break;
           }
-          case "transcription":
+          case WS_MESSAGE_TYPE.TRANSCRIPTION:
             setTranscription(msg.data.text);
             break;
-          case "chunk":
+          case WS_MESSAGE_TYPE.CHUNK:
             addResponseChunk(msg.data.content);
             break;
-          case "error":
+          case WS_MESSAGE_TYPE.ERROR:
             setError(msg.data.message);
             break;
         }

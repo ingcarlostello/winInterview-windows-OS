@@ -8,7 +8,7 @@
 - **Orchestration backend**: `backend/` — FastAPI + WebSockets, managed via Poetry. Uses Deepgram SDK (nova-3 for ASR), NVIDIA API (Gemma 3n for LLM), DashScope/Aliyun (Qwen for vision analysis)
 - The app runs as a transparent, always-on-top overlay (`730×520` collapsed, `1200×520` expanded, frameless) designed to float over Zoom/Meet
 - **Flow**: Microphone → PyAudio (16kHz PCM) → streamed to Deepgram Agent (ASR only) → transcription triggers LLM streaming via NVIDIA Gemma → Response chunks via WebSocket → Frontend renders Markdown + code blocks
-- **Screen capture**: AppleScript + `screencapture` (macOS only) → base64 encode → VisionLLMService (Qwen) → analysis via separate WebSocket
+- **Screen capture**: Tauri command `capture_screen` in `src-tauri/src/lib.rs` uses the `xcap` crate to capture the first monitor, resizes to a max width of 1280 px, encodes as JPEG (quality 75), and returns base64 → stored in Zustand (`screenImages`, max 4) → VisionLLMService (Qwen) analyzes via separate WebSocket
 
 ## Commands
 
@@ -41,7 +41,7 @@ Tauri bundles the Vite output from `dist/`. Run `npm run build` before `npm run 
 - **Tailwind CSS v4** uses `@import "tailwindcss"` (no `tailwind.config.*` file — configure in CSS via `@theme`)
 - **Python >= 3.14** is required for the backend
 - Vite dev server uses **strict port 5173**; Tauri expects it there
-- **Screen capture is macOS-only** (uses AppleScript + `screencapture`)
+- **Screen capture is currently implemented in the Tauri Rust layer** using the `xcap` crate (captures the first available monitor)
 
 ## Frontend
 
@@ -61,7 +61,7 @@ Single store at `src/stores/interview.ts` (persisted settings via `persist` midd
 | `showPromptEditor` | `boolean` | Prompt editor visibility |
 | `ghostMode` | `boolean` | Click-through mode |
 | `contentProtected` | `boolean` | Content protection (blur) |
-| `theme` | `'dark' \| 'liquid'` | Visual theme |
+| `theme` | `'dark' \| 'glass'` | Visual theme |
 | `screenPanelOpen` | `boolean` | Screen panel visibility |
 | `screenImage` | `string \| null` | Latest screen capture (base64) |
 | `screenImages` | `string[]` | Thumbnail grid (max 4) |
@@ -98,8 +98,8 @@ Actions: `setStatus`, `setLanguage`, `setTranscription`, `addResponseChunk`, `cl
 
 | Component | Purpose |
 |---|---|
-| `App.tsx` | Root — wires `useWebSocket().send` to `Overlay` callbacks. Handles screen capture via `fetch` to backend API. Listens for Tauri `capture-screen-shortcut` event. Invokes `set_window_expanded` Tauri command |
-| `Overlay.tsx` | Main layout — header bar (StatusBar + Controls), PromptEditor, Transcription, Response, QuestionCounter, ScreenPanel. Supports `dark` and `liquid` themes. Ghost mode styling. Listens for Tauri `ghost-mode-changed` and `content-protected-changed` events |
+| `App.tsx` | Root — wires `useWebSocket().send` to `Overlay` callbacks. Listens for Tauri `capture-screen-shortcut` event and invokes `capture_screen` command. Invokes `set_window_expanded` Tauri command |
+| `Overlay.tsx` | Main layout — header bar (StatusBar + Controls), PromptEditor, Transcription, Response, QuestionCounter, ScreenPanel. Supports `dark` and `glass` themes. Ghost mode styling. Listens for Tauri `ghost-mode-changed` and `content-protected-changed` events |
 | `StatusBar.tsx` | Bot icon, theme toggle (Dark/Liquid), screen reader toggle, language selector, ghost mode badge, content protection badge, status dot with pulse animation, microphone icon, error text. Uses `data-tauri-drag-region` for window dragging |
 | `Transcription.tsx` | Shows "Entrevistador" label + transcribed text in bordered box. Shows placeholder when no content |
 | `Response.tsx` | AI Copilot response area. Uses `react-markdown` + `remark-gfm` + `react-syntax-highlighter` (vscDarkPlus theme). Custom table styling. Blinking cursor (`▎`) during streaming. Three-dot animation while thinking. Copy button |
@@ -107,11 +107,11 @@ Actions: `setStatus`, `setLanguage`, `setTranscription`, `addResponseChunk`, `cl
 | `PromptEditor.tsx` | Collapsible editor. Textarea for custom prompt. Save button (triggers reconnect), Restore default button. Shows "Active prompt" indicator. Draft state synced with store on language change |
 | `QuestionCounter.tsx` | Displays count of answered questions. Hidden when count is 0. Singular/plural handling via translations |
 | `LanguageSelector.tsx` | Dropdown selector for ES/EN with flag emojis. Click-outside-to-close behavior. Updates store language and sends WebSocket language change command |
-| `ScreenPanel.tsx` | Screen capture analysis panel. Thumbnail grid (max 4 captures). Capture button via REST API. WebSocket connection to `ws://localhost:8000/api/ws/analyze-screens` for vision analysis. Prompt textarea for custom analysis instructions. Markdown-rendered solution output with syntax highlighting. Clear button |
+| `ScreenPanel.tsx` | Screen capture analysis panel. Thumbnail grid (max 4 captures). Capture button invokes Tauri `capture_screen` command. WebSocket connection to `ws://localhost:8000/api/ws/analyze-screens` for vision analysis. Prompt textarea for custom analysis instructions. Markdown-rendered solution output with syntax highlighting. Clear button |
 
 ### CSS
 
-- Custom utilities in `src/index.css`: `scrollbar-thin`, `aura-active`, `liquid-aura-active`, `liquid-idle-aura`, `glass-base`, `glass-button`, `icon-spin`, `dot-pulse-anim`, `ghost-active`
+- Custom utilities in `src/index.css`: `scrollbar-thin`, `aura-active`, `glass-aura-active`, `glass-aura-idle`, `glass-base`, `glass-button`, `glass-button-active`, `icon-spin`, `dot-pulse-anim`, `ghost-active`
 - Keyframe animations: `spin-slow`, `dot-pulse`, `ghost-pulse`
 - All user-facing text uses i18n translations (ES/EN)
 
@@ -141,42 +141,52 @@ Actions: `setStatus`, `setLanguage`, `setTranscription`, `addResponseChunk`, `cl
 
 **Key patterns**:
 - Deepgram Agent handles VAD and ASR only (no LLM)
-- LLM streaming via NVIDIA API (Gemma 3n) — separate from Deepgram
+- `AudioStreamingService` encapsulates the full audio pipeline (PyAudio + Deepgram) with callback-based async bridging
+- `ConversationHistory` manages the message list with system prompt preservation and auto-trimming at 20 messages
+- LLM streaming via DeepSeek API (deepseek-v4-flash) — separate from Deepgram
 - Vision analysis via DashScope/Aliyun (Qwen) — separate WebSocket endpoint
 - Audio captured via PyAudio (16kHz, 16-bit, mono) and streamed directly to Deepgram (no webrtcvad)
 - `asyncio.run_coroutine_threadsafe` bridges sync Deepgram callbacks to async event loop
 - Agent runs in separate thread to avoid blocking the async WebSocket handler
 - Dependency injection via `@lru_cache` singletons in `dependencies.py`
+- `AgentSession` constructor accepts optional `audio_service`, `history`, `screen_capture` for test injection
+- `CommandParser` uses registry-based handler pattern (open/closed for new commands)
 
 ### Modules
 
 | Module | Purpose |
 |---|---|
 | `config.py` | Pydantic settings: `deepgram_api_key`, `nvidia_api_key`, `dashscope_api_key`, `host`, `port` |
-| `context.py` | `ConversationContext` (deque-based, maxlen=10). **Unused** — imported nowhere |
-| `dependencies.py` | DI singletons: `get_connection_manager()`, `get_llm_service()` (NvidiaLLMService), `get_vision_service()` (VisionLLMService) |
-| `ws_manager.py` | `ConnectionManager` with typed sends: `send_status`, `send_transcription`, `send_response_chunk`, `send_error`, `send_screen_chunk`, `send_screen_image` |
-| `ws/handler.py` | `websocket_endpoint` FastAPI handler. Creates `AgentSession` with language/prompt from query params |
-| `ws/session.py` | `AgentSession` class (270 lines). Core session logic: manages Deepgram agent, audio capture, conversation history (max 20 messages), screen capture, LLM streaming. Commands: pause, resume, clear, set_language, set_prompt, clear_prompt, capture_screen |
-| `ws/commands.py` | `WsCommand` enum: PAUSE, RESUME, CLEAR, SET_LANGUAGE, SET_PROMPT, CLEAR_PROMPT, CAPTURE_SCREEN. `ParsedCommand` dataclass. `parse_command()` function |
+| `context.py` | `ConversationHistory` — message list management (system prompt + user/assistant messages, max 20, auto-trim). Used by `AgentSession` |
+| `dependencies.py` | DI singletons: `get_connection_manager()`, `get_llm_service()` (DeepSeekLLMService), `get_vision_service()` (VisionLLMService) |
+| `ws_manager.py` | `ConnectionManager` with typed sends using `WsMessageType`/`WsStatus` enums: `send_status`, `send_transcription`, `send_response_chunk`, `send_error`, `send_screen_chunk`, `send_screen_image` |
+| `ws/handler.py` | `websocket_endpoint` FastAPI handler. Creates `AgentSession` with language/prompt from query params. Uses `CommandParser` via `create_default_parser()` |
+| `ws/session.py` | `AgentSession` class (~192 lines). Pure coordinator: wires `AudioStreamingService` ↔ `ConversationHistory` ↔ LLM/Vision ↔ WebSocket. Accepts optional `audio_service`, `history`, `screen_capture` params for DI/testing |
+| `ws/commands.py` | `WsCommand` enum: PAUSE, RESUME, CLEAR, SET_LANGUAGE, SET_PROMPT, CLEAR_PROMPT, CAPTURE_SCREEN. `ParsedCommand` dataclass |
+| `ws/command_parser.py` | `CommandParser` with registry-based handler pattern. `ExactMatchHandler` (no-payload commands), `PrefixMatchHandler` (colon-delimited payload). `create_default_parser()` factory |
+| `ws/message_types.py` | `WsMessageType` enum (STATUS, TRANSCRIPTION, CHUNK, ERROR, SCREEN_CHUNK, SCREEN_IMAGE) and `WsStatus` enum (CONNECTED, LISTENING, THINKING, RESPONDING, PAUSED, RECONNECTING, CLEARED, CAPTURING, ANALYZING, COMPLETED, PROMPT_SAVED, PROMPT_CLEARED) |
 | `audio/capture.py` | PyAudio at 16kHz, 16-bit, mono, 20ms frames. Async capture loop with thread-safe stream access. `start()`/`stop()`/`close()` lifecycle |
+| `audio/service.py` | `AudioStreamingService` — owns PyAudio + Deepgram Agent lifecycle. Callback-driven (`on_transcription`, `on_user_started_speaking`, `on_agent_error`). Handles keepalive loop, pause/resume, language restart |
 | `agent/deepgram.py` | `DeepgramAgent` class. Wraps Deepgram SDK v7+ Agent API. `nova-3` model. `send_media()` for PCM frames. `keep_alive()` sends keepalive + dummy audio |
-| `llm/prompt.py` | Default system prompts for ES/EN. Custom prompt CRUD via `prompts.json` file. `PromptBuilder` class (unused) |
+| `llm/prompt.py` | Default system prompts for ES/EN. Custom prompt CRUD via `prompts.json` file |
 | `llm/protocol.py` | `LLMService` Protocol with `stream_response()` async iterator interface |
+| `llm/deepseek.py` | `DeepSeekLLMService` implementing `LLMService`. DeepSeek API, model `deepseek-v4-flash` |
 | `llm/nvidia.py` | `NvidiaLLMService` implementing `LLMService`. NVIDIA API (`integrate.api.nvidia.com`), model `google/gemma-3n-e4b-it`. Temperature 0.20, max_tokens 512 |
 | `llm/vision.py` | `VisionLLMService` for screen analysis. Aliyun/DashScope endpoint, model `qwen3.6-plus`. `analyze_screen()`, `analyze_multiple_screens()`. Max tokens 16384, temperature 0.60, thinking enabled |
-| `screen/capture.py` | `ScreenCapture` class (macOS only). AppleScript to get active window ID (excludes "interview-responder"), `screencapture -l` for window capture, `screencapture` for full-screen fallback |
+| `screen/capture.py` | Reserved/legacy module (currently empty). Screen capture is implemented in the Tauri Rust layer at `src-tauri/src/lib.rs` |
 | `routers/prompts.py` | REST API: `GET /prompt?lang=`, `POST /prompt`, `DELETE /prompt?lang=` |
-| `routers/screens.py` | REST: `POST /api/capture-screen` returns base64 image. WebSocket: `/api/ws/analyze-screens` accepts JSON with images array + prompt, streams vision analysis chunks |
-| `stt/` | **Legacy/unused** — empty module |
+| `routers/screens.py` | WebSocket: `/api/ws/analyze-screens` accepts JSON with images array + prompt, streams vision analysis chunks. Uses `WsMessageType` enum |
 
 ### WebSocket Message Format
 
-All messages follow: `{"type": "...", "data": {...}}`
+All messages follow: `{"type": "...", "data": {...}}` (via `ConnectionManager`) or flat `{"type": "...", ...}` (screen analysis WebSocket, not using `ConnectionManager`).
 
-**Main WebSocket (`/ws`)** message types: `status`, `transcription`, `chunk`, `error`, `cleared`, `prompt_saved`, `prompt_cleared`
+**Message type enums** (Python: `backend.ws.message_types` — `WsMessageType`, `WsStatus`; TypeScript: `src/constants/ws.ts` — `WS_MESSAGE_TYPE`, `WS_STATUS`):
 
-**Screen analysis WebSocket (`/api/ws/analyze-screens`)** message types: `screen_chunk`, `screen_image`
+| Enum | Values |
+|---|---|
+| `WsMessageType` | `STATUS`, `TRANSCRIPTION`, `CHUNK`, `ERROR`, `SCREEN_CHUNK`, `SCREEN_IMAGE` |
+| `WsStatus` | `CONNECTED`, `LISTENING`, `THINKING`, `RESPONDING`, `PAUSED`, `RECONNECTING`, `CLEARED`, `CAPTURING`, `ANALYZING`, `COMPLETED`, `PROMPT_SAVED`, `PROMPT_CLEARED` |
 
 ## Environment
 

@@ -1,26 +1,22 @@
 import asyncio
-import base64
 import logging
-from typing import Any
 
 from fastapi import WebSocket
-from fastapi.websockets import WebSocketDisconnect
-from websockets.exceptions import ConnectionClosed
 
-from backend.agent.deepgram import DeepgramAgent
-from backend.audio.capture import AudioCapture
+from backend.audio.service import AudioStreamingService
+from backend.context import ConversationHistory
 from backend.llm.prompt import delete_custom_prompt, get_system_prompt, save_custom_prompt
 from backend.llm.protocol import LLMService
-from backend.screen.capture import ScreenCapture
 from backend.llm.vision import VisionLLMService
 from backend.ws.commands import ParsedCommand, WsCommand
+from backend.ws.message_types import WsStatus
 from backend.ws_manager import ConnectionManager
 
 logger = logging.getLogger(__name__)
 
 
 class AgentSession:
-    MAX_HISTORY = 20
+    """Coordinates audio, conversation history, LLM streaming, and WebSocket events."""
 
     def __init__(
         self,
@@ -31,77 +27,50 @@ class AgentSession:
         vision_service: VisionLLMService,
         initial_language: str = "es",
         custom_prompt: str | None = None,
+        audio_service: AudioStreamingService | None = None,
+        history: ConversationHistory | None = None,
     ) -> None:
         self.session_id = session_id
         self.websocket = websocket
         self.llm_service = llm_service
         self.manager = manager
         self.vision_service = vision_service
-        
+
         self.language = initial_language if initial_language in ("es", "en") else "es"
-        self.is_paused = False
-        
-        if custom_prompt and custom_prompt.strip():
-            system_prompt = custom_prompt.strip()
+
+        self._loop = asyncio.get_running_loop()
+
+        custom = custom_prompt and custom_prompt.strip()
+        if custom:
             logger.info(f"Session {self.session_id} using custom prompt from query parameter")
         else:
-            system_prompt = get_system_prompt(self.language)
             logger.info(f"Session {self.session_id} using default prompt for language '{self.language}'")
-        
-        self.conversation_history: list[dict[str, str]] = [
-            {"role": "system", "content": system_prompt}
-        ]
-        self.screen_analysis: str | None = None
-        
-        self.agent = DeepgramAgent(language=self.language)
-        self.audio_capture = AudioCapture()
-        self.screen_capture = ScreenCapture()
-        self._keepalive_task: asyncio.Task | None = None
-        self._loop = asyncio.get_running_loop()
+
+        self.history = history or ConversationHistory(self.language, custom_prompt)
+        self.audio = audio_service or AudioStreamingService(language=self.language, loop=self._loop)
+
+        self.audio.on_transcription = self._on_transcription
+        self.audio.on_user_started_speaking = self._on_user_started_speaking
+        self.audio.on_agent_error = self._on_agent_error
 
     async def start(self) -> bool:
         await self.manager.connect(self.session_id, self.websocket)
-        await self.manager.send_status(self.session_id, "connected")
-        
+        await self.manager.send_status(self.session_id, WsStatus.CONNECTED)
+
         logger.info(f"Session {self.session_id} initialized with language '{self.language}'")
-        logger.info(f"System prompt for session: {self.conversation_history[0]['content'][:150]}...")
-        
-        agent_started = self.agent.start(self._on_agent_message)
-        
-        if not agent_started or not self.agent.wait_until_ready(timeout=15):
+        logger.info(f"System prompt for session: {self.history.messages[0]['content'][:150]}...")
+
+        if not await self.audio.start():
             await self.manager.send_error(self.session_id, "Agent connection timeout")
             await self.stop()
             return False
-            
-        self.audio_capture.set_handlers(on_audio_frame=self._on_audio_frame)
-        await self.audio_capture.start()
-        await self.manager.send_status(self.session_id, "listening")
-        
-        self._keepalive_task = asyncio.create_task(self._keepalive_loop())
+
+        await self.manager.send_status(self.session_id, WsStatus.LISTENING)
         return True
 
     async def stop(self) -> None:
-        if self._keepalive_task:
-            self._keepalive_task.cancel()
-            self._keepalive_task = None
-            
-        await self.audio_capture.stop()
-        self.audio_capture.close()
-        self.agent.stop()
+        await self.audio.stop()
         self.manager.disconnect(self.session_id)
-
-    def _reset_conversation(self) -> None:
-        self.conversation_history = [
-            {"role": "system", "content": get_system_prompt(self.language)}
-        ]
-
-    def _trim_history(self) -> None:
-        if len(self.conversation_history) > self.MAX_HISTORY:
-            excess = len(self.conversation_history) - self.MAX_HISTORY
-            self.conversation_history = [
-                self.conversation_history[0],
-                *self.conversation_history[1 + excess:],
-            ]
 
     async def handle_command(self, cmd: ParsedCommand) -> None:
         handler = {
@@ -111,160 +80,77 @@ class AgentSession:
             WsCommand.SET_LANGUAGE: self._handle_set_language,
             WsCommand.SET_PROMPT: self._handle_set_prompt,
             WsCommand.CLEAR_PROMPT: self._handle_clear_prompt,
-            WsCommand.CAPTURE_SCREEN: self._handle_capture_screen,
         }.get(cmd.command)
         if handler:
             await handler(cmd)
 
     async def _handle_pause(self, cmd: ParsedCommand) -> None:
-        self.is_paused = True
-        await self.audio_capture.stop()
-        await self.manager.send_status(self.session_id, "paused")
+        await self.audio.pause()
+        await self.manager.send_status(self.session_id, WsStatus.PAUSED)
 
     async def _handle_resume(self, cmd: ParsedCommand) -> None:
-        self.is_paused = False
-        await self.audio_capture.start()
-        await self.manager.send_status(self.session_id, "listening")
+        await self.audio.resume()
+        await self.manager.send_status(self.session_id, WsStatus.LISTENING)
 
     async def _handle_clear(self, cmd: ParsedCommand) -> None:
-        self._reset_conversation()
-        await self.manager.send_status(self.session_id, "cleared")
+        self.history.reset()
+        await self.manager.send_status(self.session_id, WsStatus.CLEARED)
 
     async def _handle_set_language(self, cmd: ParsedCommand) -> None:
         new_lang = cmd.payload
         if new_lang in ("es", "en") and new_lang != self.language:
-            await self._restart_agent(new_lang)
+            self.language = new_lang
+            await self.manager.send_status(self.session_id, WsStatus.RECONNECTING)
+
+            if not await self.audio.restart(new_lang):
+                await self.manager.send_error(self.session_id, "Agent reconnection timeout")
+                return
+
+            self.history.reset(new_lang)
+            await self.manager.send_status(self.session_id, WsStatus.LISTENING)
+            logger.info(f"Session {self.session_id} restarted agent with language '{new_lang}'")
 
     async def _handle_set_prompt(self, cmd: ParsedCommand) -> None:
         custom_prompt = cmd.payload.strip()
         if custom_prompt:
             logger.info(f"Received set_prompt for session {self.session_id}: {custom_prompt[:100]}...")
             save_custom_prompt(self.language, custom_prompt)
-            self.conversation_history[0]["content"] = custom_prompt
+            self.history.set_system_prompt(custom_prompt)
             logger.info("Updated conversation_history[0] with custom prompt")
-            await self.manager.send_status(self.session_id, "prompt_saved")
+            await self.manager.send_status(self.session_id, WsStatus.PROMPT_SAVED)
 
     async def _handle_clear_prompt(self, cmd: ParsedCommand) -> None:
         logger.info(f"Received clear_prompt for session {self.session_id}")
         delete_custom_prompt(self.language)
-        self.conversation_history[0]["content"] = get_system_prompt(self.language)
-        await self.manager.send_status(self.session_id, "prompt_cleared")
+        self.history.set_system_prompt(get_system_prompt(self.language))
+        await self.manager.send_status(self.session_id, WsStatus.PROMPT_CLEARED)
 
-    async def _handle_capture_screen(self, cmd: ParsedCommand) -> None:
-        asyncio.create_task(self._handle_screen_capture())
+    async def _on_user_started_speaking(self) -> None:
+        await self.manager.send_status(self.session_id, WsStatus.LISTENING)
 
-    async def _restart_agent(self, new_language: str) -> None:
-        await self.manager.send_status(self.session_id, "reconnecting")
-        await self.audio_capture.stop()
-        self.agent.stop()
-        
-        self.language = new_language
-        self._reset_conversation()
-        
-        agent_started = self.agent.start(self._on_agent_message)
-        
-        if not agent_started or not self.agent.wait_until_ready(timeout=15):
-            await self.manager.send_error(self.session_id, "Agent reconnection timeout")
-            return
-            
-        self.audio_capture.set_handlers(on_audio_frame=self._on_audio_frame)
-        self.is_paused = False
-        await self.audio_capture.start()
-        await self.manager.send_status(self.session_id, "listening")
-        logger.info(f"Session {self.session_id} restarted agent with language '{new_language}'")
+    async def _on_agent_error(self, message: str) -> None:
+        await self.manager.send_error(self.session_id, message)
 
-    def _on_audio_frame(self, frame: bytes) -> None:
-        if not self.is_paused:
-            self.agent.send_media(frame)
-
-    def _on_agent_message(self, result: Any) -> None:
-        msg_type = getattr(result, "type", None)
-
-        if msg_type == "SettingsApplied":
-            self.agent.on_settings_applied()
-        elif msg_type == "UserStartedSpeaking":
-            asyncio.run_coroutine_threadsafe(
-                self.manager.send_status(self.session_id, "listening"), self._loop
-            )
-        elif msg_type == "ConversationText":
-            role = getattr(result, "role", None)
-            content = getattr(result, "content", "")
-            if not content:
-                return
-            if role == "user":
-                asyncio.run_coroutine_threadsafe(
-                    self._on_user_text(content), self._loop
-                )
-        elif msg_type == "Error":
-            desc = getattr(result, "description", str(result))
-            asyncio.run_coroutine_threadsafe(
-                self.manager.send_error(self.session_id, desc), self._loop
-            )
-        elif msg_type == "Warning":
-            pass
-
-    async def _on_user_text(self, text: str) -> None:
+    async def _on_transcription(self, text: str) -> None:
         await self.manager.send_transcription(self.session_id, text)
-        await self.manager.send_status(self.session_id, "thinking")
-        
-        self.conversation_history.append({"role": "user", "content": text})
-        self._trim_history()
-        
+        await self.manager.send_status(self.session_id, WsStatus.THINKING)
+
+        self.history.add_user_message(text)
+
         response_text = ""
         first_chunk = True
-        
+
         try:
-            async for chunk in self.llm_service.stream_response(self.conversation_history, self.session_id):
+            async for chunk in self.llm_service.stream_response(self.history.messages, self.session_id):
                 if first_chunk:
-                    await self.manager.send_status(self.session_id, "responding")
+                    await self.manager.send_status(self.session_id, WsStatus.RESPONDING)
                     first_chunk = False
                 response_text += chunk
                 await self.manager.send_response_chunk(self.session_id, chunk)
-                
-            self.conversation_history.append({"role": "assistant", "content": response_text})
-            self._trim_history()
+
+            self.history.add_assistant_message(response_text)
         except Exception as e:
             logger.exception("LLM streaming failed for session %s", self.session_id)
             await self.manager.send_error(self.session_id, str(e))
-            
-        await self.manager.send_status(self.session_id, "listening")
 
-    async def _handle_screen_capture(self) -> None:
-        previous_status = "listening" if not self.is_paused else "paused"
-        await self.manager.send_status(self.session_id, "capturing")
-
-        try:
-            image_bytes = await self._loop.run_in_executor(
-                None, self.screen_capture.capture_screen
-            )
-            image_base64 = base64.b64encode(image_bytes).decode()
-
-            await self.manager.send_screen_image(self.session_id, image_base64)
-
-            analysis_text = ""
-
-            async for chunk in self.vision_service.analyze_screen(
-                image_base64, self.session_id
-            ):
-                analysis_text += chunk
-                await self.manager.send_screen_chunk(self.session_id, chunk)
-
-            self.screen_analysis = analysis_text
-            logger.info(
-                f"Screen analysis completed for session {self.session_id}"
-            )
-
-        except Exception:
-            logger.exception("Screen capture failed for session %s", self.session_id)
-            await self.manager.send_error(self.session_id, "Capture failed")
-
-        await self.manager.send_status(self.session_id, previous_status)
-
-    async def _keepalive_loop(self) -> None:
-        while True:
-            if self.is_paused:
-                try:
-                    await self._loop.run_in_executor(None, self.agent.keep_alive)
-                except Exception as e:
-                    logger.warning("Keepalive execution error: %s", e)
-            await asyncio.sleep(3)
+        await self.manager.send_status(self.session_id, WsStatus.LISTENING)

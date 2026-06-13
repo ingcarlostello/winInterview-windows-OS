@@ -1,13 +1,59 @@
+use std::io::Cursor;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use base64::Engine;
+use image::{imageops, codecs::jpeg::JpegEncoder, DynamicImage};
 use tauri::{Emitter, LogicalSize, Manager, Size};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+use xcap::Monitor;
 
 /// Thread-safe flags shared between shortcut handlers and commands.
 static GHOST_MODE: AtomicBool = AtomicBool::new(false);
 static CONTENT_PROTECTED: AtomicBool = AtomicBool::new(true);
 
 // ── Tauri commands ──────────────────────────────────────────────────────────
+
+#[tauri::command]
+async fn capture_screen() -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        let monitors = Monitor::all().map_err(|e| format!("Failed to enumerate monitors: {e}"))?;
+        let monitor = monitors
+            .first()
+            .ok_or_else(|| "No monitors found".to_string())?;
+
+        let raw = monitor
+            .capture_image()
+            .map_err(|e| format!("Failed to capture monitor '{}': {e}", monitor.name()))?;
+        let image = DynamicImage::ImageRgba8(raw);
+
+        // Aspect-preserving resize with a fast filter
+        let image = if image.width() > 1280 {
+            image.resize(1280, u32::MAX, imageops::FilterType::CatmullRom)
+        } else {
+            image
+        };
+
+        let rgb_image = image.into_rgb8();
+
+        let mut jpeg_bytes: Vec<u8> = Vec::new();
+        {
+            let mut cursor = Cursor::new(&mut jpeg_bytes);
+            let mut encoder = JpegEncoder::new_with_quality(&mut cursor, 75);
+            encoder
+                .encode(
+                    rgb_image.as_raw(),
+                    rgb_image.width(),
+                    rgb_image.height(),
+                    image::ExtendedColorType::Rgb8,
+                )
+                .map_err(|e| format!("Failed to encode JPEG: {e}"))?;
+        }
+
+        Ok(base64::engine::general_purpose::STANDARD.encode(&jpeg_bytes))
+    })
+    .await
+    .map_err(|e| format!("Capture task panicked: {e}"))?
+}
 
 #[tauri::command]
 fn toggle_always_on_top(window: tauri::Window) {
@@ -97,6 +143,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            capture_screen,
             toggle_always_on_top,
             toggle_content_protected,
             set_window_expanded,

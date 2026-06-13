@@ -7,7 +7,7 @@ from websockets.exceptions import ConnectionClosed
 from backend.dependencies import get_connection_manager, get_llm_service, get_vision_service
 from backend.llm.protocol import LLMService
 from backend.llm.vision import VisionLLMService
-from backend.ws.commands import parse_command
+from backend.ws.command_parser import create_default_parser
 from backend.ws.session import AgentSession
 from backend.ws_manager import ConnectionManager
 
@@ -37,10 +37,12 @@ async def websocket_endpoint(
     if not await session.start():
         return
         
+    parser = create_default_parser()
+        
     try:
         while True:
             msg = await websocket.receive_text()
-            cmd = parse_command(msg)
+            cmd = parser.parse(msg)
             if cmd:
                 await session.handle_command(cmd)
             else:
