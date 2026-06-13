@@ -14,11 +14,19 @@ static CONTENT_PROTECTED: AtomicBool = AtomicBool::new(true);
 // ── Tauri commands ──────────────────────────────────────────────────────────
 
 #[tauri::command]
-async fn capture_screen() -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(|| {
+async fn capture_screen(window: tauri::Window) -> Result<String, String> {
+    let current_monitor_name = window
+        .current_monitor()
+        .map_err(|e| e.to_string())?
+        .and_then(|m| m.name().map(|n| n.to_string()))
+        .unwrap_or_default();
+
+    tauri::async_runtime::spawn_blocking(move || {
         let monitors = Monitor::all().map_err(|e| format!("Failed to enumerate monitors: {e}"))?;
         let monitor = monitors
-            .first()
+            .into_iter()
+            .find(|m| m.name() == current_monitor_name)
+            .or_else(|| Monitor::all().ok()?.into_iter().next())
             .ok_or_else(|| "No monitors found".to_string())?;
 
         let raw = monitor

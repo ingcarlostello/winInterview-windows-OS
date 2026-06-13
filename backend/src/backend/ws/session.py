@@ -99,13 +99,13 @@ class AgentSession:
     async def _handle_set_language(self, cmd: ParsedCommand) -> None:
         new_lang = cmd.payload
         if new_lang in ("es", "en") and new_lang != self.language:
-            self.language = new_lang
             await self.manager.send_status(self.session_id, WsStatus.RECONNECTING)
 
             if not await self.audio.restart(new_lang):
                 await self.manager.send_error(self.session_id, "Agent reconnection timeout")
                 return
 
+            self.language = new_lang
             self.history.reset(new_lang)
             await self.manager.send_status(self.session_id, WsStatus.LISTENING)
             logger.info(f"Session {self.session_id} restarted agent with language '{new_lang}'")
