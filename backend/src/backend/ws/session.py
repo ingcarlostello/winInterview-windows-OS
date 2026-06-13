@@ -1,5 +1,4 @@
 import asyncio
-import base64
 import logging
 
 from fastapi import WebSocket
@@ -9,7 +8,6 @@ from backend.context import ConversationHistory
 from backend.llm.prompt import delete_custom_prompt, get_system_prompt, save_custom_prompt
 from backend.llm.protocol import LLMService
 from backend.llm.vision import VisionLLMService
-from backend.screen.capture import ScreenCapture
 from backend.ws.commands import ParsedCommand, WsCommand
 from backend.ws.message_types import WsStatus
 from backend.ws_manager import ConnectionManager
@@ -31,7 +29,6 @@ class AgentSession:
         custom_prompt: str | None = None,
         audio_service: AudioStreamingService | None = None,
         history: ConversationHistory | None = None,
-        screen_capture: ScreenCapture | None = None,
     ) -> None:
         self.session_id = session_id
         self.websocket = websocket
@@ -51,8 +48,6 @@ class AgentSession:
 
         self.history = history or ConversationHistory(self.language, custom_prompt)
         self.audio = audio_service or AudioStreamingService(language=self.language, loop=self._loop)
-        self.screen_capture = screen_capture or ScreenCapture()
-        self.screen_analysis: str | None = None
 
         self.audio.on_transcription = self._on_transcription
         self.audio.on_user_started_speaking = self._on_user_started_speaking
@@ -85,7 +80,6 @@ class AgentSession:
             WsCommand.SET_LANGUAGE: self._handle_set_language,
             WsCommand.SET_PROMPT: self._handle_set_prompt,
             WsCommand.CLEAR_PROMPT: self._handle_clear_prompt,
-            WsCommand.CAPTURE_SCREEN: self._handle_capture_screen,
         }.get(cmd.command)
         if handler:
             await handler(cmd)
@@ -131,9 +125,6 @@ class AgentSession:
         self.history.set_system_prompt(get_system_prompt(self.language))
         await self.manager.send_status(self.session_id, WsStatus.PROMPT_CLEARED)
 
-    async def _handle_capture_screen(self, cmd: ParsedCommand) -> None:
-        asyncio.create_task(self._handle_screen_capture())
-
     async def _on_user_started_speaking(self) -> None:
         await self.manager.send_status(self.session_id, WsStatus.LISTENING)
 
@@ -163,34 +154,3 @@ class AgentSession:
             await self.manager.send_error(self.session_id, str(e))
 
         await self.manager.send_status(self.session_id, WsStatus.LISTENING)
-
-    async def _handle_screen_capture(self) -> None:
-        previous_status = WsStatus.LISTENING if not self.audio.is_paused else WsStatus.PAUSED
-        await self.manager.send_status(self.session_id, WsStatus.CAPTURING)
-
-        try:
-            image_bytes = await self._loop.run_in_executor(
-                None, self.screen_capture.capture_screen
-            )
-            image_base64 = base64.b64encode(image_bytes).decode()
-
-            await self.manager.send_screen_image(self.session_id, image_base64)
-
-            analysis_text = ""
-
-            async for chunk in self.vision_service.analyze_screen(
-                image_base64, self.session_id
-            ):
-                analysis_text += chunk
-                await self.manager.send_screen_chunk(self.session_id, chunk)
-
-            self.screen_analysis = analysis_text
-            logger.info(
-                f"Screen analysis completed for session {self.session_id}"
-            )
-
-        except Exception:
-            logger.exception("Screen capture failed for session %s", self.session_id)
-            await self.manager.send_error(self.session_id, "Capture failed")
-
-        await self.manager.send_status(self.session_id, previous_status)

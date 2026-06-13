@@ -54,7 +54,6 @@ def create_default_parser() -> CommandParser:
         WsCommand.RESUME,
         WsCommand.CLEAR,
         WsCommand.CLEAR_PROMPT,
-        WsCommand.CAPTURE_SCREEN,
     ):
         parser.register(ExactMatchHandler(cmd))
 

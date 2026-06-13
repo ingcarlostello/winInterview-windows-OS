@@ -5,8 +5,6 @@ import { useWebSocket } from "./hooks/useWebSocket";
 import { useInterviewStore } from "./stores/interview";
 import { invoke } from "@tauri-apps/api/core";
 
-const API_CAPTURE_URL = "http://localhost:8000/api/capture-screen";
-
 export default function App() {
   const { send, disconnect, connect, setPrompt, restoreDefaultPrompt, changeLanguage } = useWebSocket();
 
@@ -15,12 +13,17 @@ export default function App() {
     if (!canCapture) return;
 
     useInterviewStore.getState().setIsCapturingScreen(true);
-    try {
-      const response = await fetch(API_CAPTURE_URL, { method: "POST" });
-      if (!response.ok) throw new Error("Capture failed");
 
-      const data = await response.json();
-      useInterviewStore.getState().addScreenImage(data.image);
+    // Wait for the browser to actually paint the spinner
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => resolve());
+      });
+    });
+
+    try {
+      const img = await invoke<string>("capture_screen");
+      useInterviewStore.getState().addScreenImage(img);
     } catch (error) {
       console.error("Error capturing screen:", error);
     } finally {

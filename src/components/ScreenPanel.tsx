@@ -7,10 +7,10 @@ import { useInterviewStore } from "../stores/interview";
 import { useTranslation } from "../hooks/useTranslation";
 import { WS_MESSAGE_TYPE, WS_STATUS } from "../constants/ws";
 import { useCallback, useRef } from "react";
+import { invoke } from "@tauri-apps/api/core";
 
 const MAX_CAPTURES = 4;
 const WS_ANALYZE_URL = "ws://localhost:8000/api/ws/analyze-screens";
-const API_CAPTURE_URL = "http://localhost:8000/api/capture-screen";
 
 export default function ScreenPanel() {
   const screenImages = useInterviewStore((s) => s.screenImages);
@@ -40,12 +40,18 @@ export default function ScreenPanel() {
     if (!canCapture) return;
 
     setIsCapturingScreen(true);
-    try {
-      const response = await fetch(API_CAPTURE_URL, { method: "POST" });
-      if (!response.ok) throw new Error("Capture failed");
 
-      const data = await response.json();
-      addScreenImage(data.image);
+    // Wait for the browser to actually paint the spinner before
+    // invoking the Tauri command (which may still briefly block IPC)
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => resolve());
+      });
+    });
+
+    try {
+      const img = await invoke<string>("capture_screen");
+      addScreenImage(img);
     } catch (error) {
       console.error("Error capturing screen:", error);
     } finally {
@@ -146,7 +152,7 @@ export default function ScreenPanel() {
                 className="scan-line w-[120px] h-[120px] rounded-lg overflow-hidden border border-white/15 bg-black/20 shrink-0"
               >
                 <img
-                  src={`data:image/png;base64,${image}`}
+                  src={`data:image/jpeg;base64,${image}`}
                   alt={`Captura ${index + 1}`}
                   className="w-full h-full object-cover"
                 />
@@ -300,17 +306,26 @@ export default function ScreenPanel() {
       </div>
 
       {/* Capture Again Button - at bottom when already has captures */}
-      {hasCaptures && !hasAnalysis && !isCapturingScreen && (
+      {hasCaptures && !hasAnalysis && (
         <>
           <div className="border-b border-white/10 mx-3" />
           <div className="px-3 py-2.5 shrink-0">
             <button
               onClick={handleCapture}
-              disabled={!canCapture}
+              disabled={!canCapture || isCapturingScreen}
               className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-accent-soft border border-accent-border text-accent text-xs font-medium hover:bg-accent/25 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <RefreshCw size={12} />
-              {t("captureAgain")}
+              {isCapturingScreen ? (
+                <>
+                  <RefreshCw size={12} className="animate-spin" />
+                  {t("capturing")}
+                </>
+              ) : (
+                <>
+                  <RefreshCw size={12} />
+                  {t("captureAgain")}
+                </>
+              )}
             </button>
           </div>
         </>

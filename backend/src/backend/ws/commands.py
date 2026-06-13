@@ -9,7 +9,6 @@ class WsCommand(str, Enum):
     SET_LANGUAGE = "set_language"
     SET_PROMPT = "set_prompt"
     CLEAR_PROMPT = "clear_prompt"
-    CAPTURE_SCREEN = "capture_screen"
 
 
 @dataclass
