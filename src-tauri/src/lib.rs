@@ -28,7 +28,7 @@ async fn capture_screen() -> Result<String, String> {
 
         // Aspect-preserving resize with a fast filter
         let image = if image.width() > 1280 {
-            image.resize(1280, u32::MAX, imageops::FilterType::CatmullRom)
+            image.resize(1280, u32::MAX, imageops::FilterType::Triangle)
         } else {
             image
         };
