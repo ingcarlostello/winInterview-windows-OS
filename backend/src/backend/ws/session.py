@@ -14,9 +14,56 @@ from backend.ws_manager import ConnectionManager
 
 logger = logging.getLogger(__name__)
 
+class DialogCoordinator:
+    """Orquesta la lógica de negocio puramente: Audio, LLM, Historial. Sin estado de red."""
+    
+    def __init__(self, session_id: str, language: str, audio_service: AudioStreamingService, llm_service: LLMService, history: ConversationHistory):
+        self.session_id = session_id
+        self.language = language
+        self.audio = audio_service
+        self.llm = llm_service
+        self.history = history
+        
+        # Callbacks para emitir eventos sin acoplarse al WebSocket
+        self.on_state_change = None 
+        self.on_chunk_received = None
+        self.on_error = None
+        self.on_transcription_received = None
+
+    async def handle_transcription(self, text: str):
+        if self.on_transcription_received:
+            await self.on_transcription_received(text)
+            
+        if self.on_state_change:
+            await self.on_state_change(WsStatus.THINKING)
+            
+        self.history.add_user_message(text)
+
+        response_chunks = []
+        first_chunk = True
+
+        try:
+            async for chunk in self.llm.stream_response(self.history.messages, self.session_id):
+                if first_chunk:
+                    if self.on_state_change:
+                        await self.on_state_change(WsStatus.RESPONDING)
+                    first_chunk = False
+                response_chunks.append(chunk)
+                if self.on_chunk_received:
+                    await self.on_chunk_received(chunk)
+
+            self.history.add_assistant_message("".join(response_chunks))
+        except Exception as e:
+            logger.exception("LLM streaming failed for session %s", self.session_id)
+            if self.on_error:
+                await self.on_error(str(e))
+                
+        if self.on_state_change:
+            await self.on_state_change(WsStatus.LISTENING)
+
 
 class AgentSession:
-    """Coordinates audio, conversation history, LLM streaming, and WebSocket events."""
+    """Maneja la conexión WebSocket y rutea eventos hacia el DialogCoordinator."""
 
     def __init__(
         self,
@@ -37,7 +84,6 @@ class AgentSession:
         self.vision_service = vision_service
 
         self.language = initial_language if initial_language in ("es", "en") else "es"
-
         self._loop = asyncio.get_running_loop()
 
         custom = custom_prompt and custom_prompt.strip()
@@ -49,23 +95,48 @@ class AgentSession:
         self.history = history or ConversationHistory(self.language, custom_prompt)
         self.audio = audio_service or AudioStreamingService(language=self.language, loop=self._loop)
 
-        self.audio.on_transcription = self._on_transcription
+        # Configurar el coordinador de diálogo
+        self.coordinator = DialogCoordinator(
+            session_id=self.session_id,
+            language=self.language,
+            audio_service=self.audio,
+            llm_service=self.llm_service,
+            history=self.history
+        )
+        self.coordinator.on_state_change = self._send_status
+        self.coordinator.on_chunk_received = self._send_chunk
+        self.coordinator.on_error = self._send_error
+        self.coordinator.on_transcription_received = self._send_transcription
+
+        self.audio.on_transcription = self.coordinator.handle_transcription
         self.audio.on_user_started_speaking = self._on_user_started_speaking
-        self.audio.on_agent_error = self._on_agent_error
+        self.audio.on_agent_error = self._send_error
+
+    async def _send_status(self, status: WsStatus):
+        await self.manager.send_status(self.session_id, status)
+        
+    async def _send_chunk(self, chunk: str):
+        await self.manager.send_response_chunk(self.session_id, chunk)
+        
+    async def _send_error(self, error: str):
+        await self.manager.send_error(self.session_id, error)
+        
+    async def _send_transcription(self, text: str):
+        await self.manager.send_transcription(self.session_id, text)
 
     async def start(self) -> bool:
         await self.manager.connect(self.session_id, self.websocket)
-        await self.manager.send_status(self.session_id, WsStatus.CONNECTED)
+        await self._send_status(WsStatus.CONNECTED)
 
         logger.info(f"Session {self.session_id} initialized with language '{self.language}'")
         logger.info(f"System prompt for session: {self.history.messages[0]['content'][:150]}...")
 
         if not await self.audio.start():
-            await self.manager.send_error(self.session_id, "Agent connection timeout")
+            await self._send_error("Agent connection timeout")
             await self.stop()
             return False
 
-        await self.manager.send_status(self.session_id, WsStatus.LISTENING)
+        await self._send_status(WsStatus.LISTENING)
         return True
 
     async def stop(self) -> None:
@@ -86,28 +157,29 @@ class AgentSession:
 
     async def _handle_pause(self, cmd: ParsedCommand) -> None:
         await self.audio.pause()
-        await self.manager.send_status(self.session_id, WsStatus.PAUSED)
+        await self._send_status(WsStatus.PAUSED)
 
     async def _handle_resume(self, cmd: ParsedCommand) -> None:
         await self.audio.resume()
-        await self.manager.send_status(self.session_id, WsStatus.LISTENING)
+        await self._send_status(WsStatus.LISTENING)
 
     async def _handle_clear(self, cmd: ParsedCommand) -> None:
         self.history.reset()
-        await self.manager.send_status(self.session_id, WsStatus.CLEARED)
+        await self._send_status(WsStatus.CLEARED)
 
     async def _handle_set_language(self, cmd: ParsedCommand) -> None:
         new_lang = cmd.payload
         if new_lang in ("es", "en") and new_lang != self.language:
-            await self.manager.send_status(self.session_id, WsStatus.RECONNECTING)
+            await self._send_status(WsStatus.RECONNECTING)
 
             if not await self.audio.restart(new_lang):
-                await self.manager.send_error(self.session_id, "Agent reconnection timeout")
+                await self._send_error("Agent reconnection timeout")
                 return
 
             self.language = new_lang
+            self.coordinator.language = new_lang
             self.history.reset(new_lang)
-            await self.manager.send_status(self.session_id, WsStatus.LISTENING)
+            await self._send_status(WsStatus.LISTENING)
             logger.info(f"Session {self.session_id} restarted agent with language '{new_lang}'")
 
     async def _handle_set_prompt(self, cmd: ParsedCommand) -> None:
@@ -117,40 +189,13 @@ class AgentSession:
             save_custom_prompt(self.language, custom_prompt)
             self.history.set_system_prompt(custom_prompt)
             logger.info("Updated conversation_history[0] with custom prompt")
-            await self.manager.send_status(self.session_id, WsStatus.PROMPT_SAVED)
+            await self._send_status(WsStatus.PROMPT_SAVED)
 
     async def _handle_clear_prompt(self, cmd: ParsedCommand) -> None:
         logger.info(f"Received clear_prompt for session {self.session_id}")
         delete_custom_prompt(self.language)
         self.history.set_system_prompt(get_system_prompt(self.language))
-        await self.manager.send_status(self.session_id, WsStatus.PROMPT_CLEARED)
+        await self._send_status(WsStatus.PROMPT_CLEARED)
 
     async def _on_user_started_speaking(self) -> None:
-        await self.manager.send_status(self.session_id, WsStatus.LISTENING)
-
-    async def _on_agent_error(self, message: str) -> None:
-        await self.manager.send_error(self.session_id, message)
-
-    async def _on_transcription(self, text: str) -> None:
-        await self.manager.send_transcription(self.session_id, text)
-        await self.manager.send_status(self.session_id, WsStatus.THINKING)
-
-        self.history.add_user_message(text)
-
-        response_chunks = []
-        first_chunk = True
-
-        try:
-            async for chunk in self.llm_service.stream_response(self.history.messages, self.session_id):
-                if first_chunk:
-                    await self.manager.send_status(self.session_id, WsStatus.RESPONDING)
-                    first_chunk = False
-                response_chunks.append(chunk)
-                await self.manager.send_response_chunk(self.session_id, chunk)
-
-            self.history.add_assistant_message("".join(response_chunks))
-        except Exception as e:
-            logger.exception("LLM streaming failed for session %s", self.session_id)
-            await self.manager.send_error(self.session_id, str(e))
-
-        await self.manager.send_status(self.session_id, WsStatus.LISTENING)
+        await self._send_status(WsStatus.LISTENING)
