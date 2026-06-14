@@ -113,8 +113,8 @@ export function useWebSocket() {
             setError(msg.data.message);
             break;
         }
-      } catch {
-        // ignore parse errors
+      } catch (err) {
+        console.error("[WS] Error parsing message:", err, event.data);
       }
     };
 
