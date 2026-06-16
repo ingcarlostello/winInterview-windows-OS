@@ -5,11 +5,13 @@ import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { useInterviewStore } from "../stores/interview";
 import { useTranslation } from "../hooks/useTranslation";
+import { useFeatureGate, useQuotaInfo } from "../hooks/useFeatureGate";
 import { WS_MESSAGE_TYPE, WS_STATUS } from "../constants/ws";
 import { useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
-const MAX_CAPTURES = 4;
+const MAX_CAPTURES_ULTRA = 4;
+const MAX_CAPTURES_LITE = 1;
 const WS_ANALYZE_URL = "ws://localhost:8000/api/ws/analyze-screens";
 
 export default function ScreenPanel() {
@@ -30,10 +32,14 @@ export default function ScreenPanel() {
 
   const wsRef = useRef<WebSocket | null>(null);
   const { t } = useTranslation();
+  const { allowed: canUseSimultaneousCaptures } = useFeatureGate("simultaneous_captures");
+  const { remaining: capturesRemaining, exceeded: capturesExceeded } = useQuotaInfo("screen_captures");
+
+  const MAX_CAPTURES = canUseSimultaneousCaptures ? MAX_CAPTURES_ULTRA : MAX_CAPTURES_LITE;
 
   const hasCaptures = screenImages.length > 0;
   const hasAnalysis = screenChunks.length > 0;
-  const canCapture = canCaptureScreen();
+  const canCapture = canCaptureScreen() && !capturesExceeded && screenImages.length < MAX_CAPTURES;
   const responseText = screenChunks.join("");
 
   const handleCapture = useCallback(async () => {
@@ -69,7 +75,8 @@ export default function ScreenPanel() {
     setIsAnalyzingScreen(true);
     clearScreenChunks();
 
-    const ws = new WebSocket(WS_ANALYZE_URL);
+    const planId = useInterviewStore.getState().planInfo?.plan_id ?? "lite";
+    const ws = new WebSocket(`${WS_ANALYZE_URL}?plan=${planId}`);
     wsRef.current = ws;
 
     ws.onopen = () => {
@@ -205,7 +212,14 @@ export default function ScreenPanel() {
               </button>
               {!canCapture && (
                 <span className="text-accent/60 text-[10px]">
-                  {t("captureLimitReached")}
+                  {capturesExceeded
+                    ? t("quotaExceeded")
+                    : t("captureLimitReached")}
+                </span>
+              )}
+              {canCapture && capturesRemaining > 0 && (
+                <span className="text-white/40 text-[10px]">
+                  {capturesRemaining} {t("capturesRemaining")}
                 </span>
               )}
             </div>

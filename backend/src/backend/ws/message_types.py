@@ -10,6 +10,8 @@ class WsMessageType(str, Enum):
     ERROR = "error"
     SCREEN_CHUNK = "screen_chunk"
     SCREEN_IMAGE = "screen_image"
+    PLAN_INFO = "plan_info"
+    QUOTA_UPDATE = "quota_update"
 
 
 class WsStatus(str, Enum):
@@ -29,3 +31,6 @@ class WsStatus(str, Enum):
 
     PROMPT_SAVED = "prompt_saved"
     PROMPT_CLEARED = "prompt_cleared"
+
+    QUOTA_EXCEEDED = "quota_exceeded"
+    FEATURE_BLOCKED = "feature_blocked"

@@ -3,11 +3,13 @@ import { persist } from "zustand/middleware";
 import { createSessionSlice, type SessionSlice } from "./slices/sessionSlice";
 import { createSettingsSlice, type SettingsSlice } from "./slices/settingsSlice";
 import { createScreenSlice, type ScreenSlice } from "./slices/screenSlice";
+import { createPlanSlice, type PlanSlice } from "./slices/planSlice";
 
 export type { Status } from "./slices/sessionSlice";
 export type { Language, Theme } from "./slices/settingsSlice";
+export type { PlanId, FeatureFlags, QuotaInfo, PlanInfo } from "./slices/planSlice";
 
-export interface RootState extends SessionSlice, SettingsSlice, ScreenSlice {
+export interface RootState extends SessionSlice, SettingsSlice, ScreenSlice, PlanSlice {
   reset: () => void;
 }
 
@@ -17,6 +19,7 @@ export const useInterviewStore = create<RootState>()(
       ...createSessionSlice(...a),
       ...createSettingsSlice(...a),
       ...createScreenSlice(...a),
+      ...createPlanSlice(...a),
       reset: () => {
         const set = a[0];
         set({
@@ -26,6 +29,7 @@ export const useInterviewStore = create<RootState>()(
           responseChunks: [],
           error: null,
           questionsAnswered: 0,
+          planInfo: null,
         });
       },
     }),

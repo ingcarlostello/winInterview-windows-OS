@@ -4,6 +4,7 @@ import { useInterviewStore } from "../stores/interview";
 import type { Status } from "../stores/interview";
 import LanguageSelector from "./LanguageSelector";
 import { useTranslation } from "../hooks/useTranslation";
+import { useFeatureGate } from "../hooks/useFeatureGate";
 
 type StatusStyle = {
   labelKey: string;
@@ -93,6 +94,8 @@ export default function StatusBar({ onChangeLanguage, onToggleScreenPanel }: Sta
   const screenPanelOpen = useInterviewStore((s) => s.screenPanelOpen);
   const config = statusConfig[status];
   const { t } = useTranslation();
+  const { allowed: canUseGhostMode } = useFeatureGate("ghost_mode");
+  const { allowed: canUseInvisibleMode } = useFeatureGate("invisible_mode");
 
   const handleClose = () => getCurrentWindow().close();
   const handleMinimize = () => getCurrentWindow().minimize();
@@ -175,19 +178,19 @@ export default function StatusBar({ onChangeLanguage, onToggleScreenPanel }: Sta
         <LanguageSelector onChangeLanguage={onChangeLanguage} />
 
         <div className="flex items-center gap-1.5 shrink-0">
-          {ghostMode && (
+          {ghostMode && canUseGhostMode && (
             <div className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl border transition-colors ${
-              contentProtected
+              contentProtected && canUseInvisibleMode
                 ? "bg-danger-soft/50 border-danger/20"
                 : "bg-white/5 border-white/10"
             }`}>
-              <Eye size={14} className={contentProtected ? "text-danger" : "text-white/40"} />
+              <Eye size={14} className={contentProtected && canUseInvisibleMode ? "text-danger" : "text-white/40"} />
               <div>
-                <div className={`text-[10px] font-medium leading-tight ${contentProtected ? "text-danger" : "text-white/60"}`}>
+                <div className={`text-[10px] font-medium leading-tight ${contentProtected && canUseInvisibleMode ? "text-danger" : "text-white/60"}`}>
                   {t("ghostModeOn")}
                 </div>
-                <div className={`text-[9px] leading-tight ${contentProtected ? "text-danger/60" : "text-white/30"}`}>
-                  {contentProtected ? t("ghostModeInvisibleOn") : t("ghostModeInvisibleOff")}
+                <div className={`text-[9px] leading-tight ${contentProtected && canUseInvisibleMode ? "text-danger/60" : "text-white/30"}`}>
+                  {contentProtected && canUseInvisibleMode ? t("ghostModeInvisibleOn") : t("ghostModeInvisibleOff")}
                 </div>
               </div>
             </div>
