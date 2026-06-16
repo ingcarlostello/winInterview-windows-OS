@@ -34,6 +34,7 @@ export default function Overlay({
   const ghostMode = useInterviewStore((s) => s.ghostMode);
   const setGhostMode = useInterviewStore((s) => s.setGhostMode);
   const setContentProtected = useInterviewStore((s) => s.setContentProtected);
+  const setAlwaysOnTop = useInterviewStore((s) => s.setAlwaysOnTop);
   const theme = useInterviewStore((s) => s.theme);
   const screenPanelOpen = useInterviewStore((s) => s.screenPanelOpen);
   const isActive =
@@ -50,11 +51,31 @@ export default function Overlay({
         setContentProtected(event.payload);
       },
     );
+    const unlistenAlwaysOnTop = listen<boolean>(
+      "always-on-top-changed",
+      (event) => {
+        setAlwaysOnTop(event.payload);
+      },
+    );
+    const unlistenPauseResume = listen("pause-resume-shortcut", () => {
+      const currentStatus = useInterviewStore.getState().status;
+      if (
+        currentStatus === "listening" ||
+        currentStatus === "thinking" ||
+        currentStatus === "responding"
+      ) {
+        onPause();
+      } else if (currentStatus === "paused") {
+        onResume();
+      }
+    });
     return () => {
       unlistenGhost.then((fn) => fn());
       unlistenProtect.then((fn) => fn());
+      unlistenAlwaysOnTop.then((fn) => fn());
+      unlistenPauseResume.then((fn) => fn());
     };
-  }, [setGhostMode, setContentProtected]);
+  }, [setGhostMode, setContentProtected, setAlwaysOnTop, onPause, onResume]);
 
   const isGlass = theme === "glass";
 

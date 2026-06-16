@@ -16,6 +16,7 @@ export interface SettingsSlice {
   showPromptEditor: boolean;
   ghostMode: boolean;
   contentProtected: boolean;
+  alwaysOnTop: boolean;
   setLanguage: (language: Language) => void;
   setTheme: (theme: Theme) => void;
   setCustomPrompt: (language: Language, prompt: string) => void;
@@ -25,6 +26,7 @@ export interface SettingsSlice {
   togglePromptEditor: () => void;
   setGhostMode: (on: boolean) => void;
   setContentProtected: (on: boolean) => void;
+  setAlwaysOnTop: (on: boolean) => void;
 }
 
 export const createSettingsSlice: StateCreator<RootState, [], [], SettingsSlice> = (set, get) => ({
@@ -34,6 +36,7 @@ export const createSettingsSlice: StateCreator<RootState, [], [], SettingsSlice>
   showPromptEditor: false,
   ghostMode: false,
   contentProtected: true,
+  alwaysOnTop: true,
 
   setLanguage: (language) => set({ language }),
   setTheme: (theme) => set({ theme }),
@@ -57,4 +60,5 @@ export const createSettingsSlice: StateCreator<RootState, [], [], SettingsSlice>
     set((state) => ({ showPromptEditor: !state.showPromptEditor })),
   setGhostMode: (on) => set({ ghostMode: on }),
   setContentProtected: (on) => set({ contentProtected: on }),
+  setAlwaysOnTop: (on) => set({ alwaysOnTop: on }),
 });
