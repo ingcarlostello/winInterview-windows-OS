@@ -6,7 +6,7 @@
 - **Frontend**: `src/` — React 19, Tailwind CSS v4, Zustand, Vite, react-markdown, react-syntax-highlighter
 - **Desktop shell**: `src-tauri/` — Rust (window management commands, global shortcuts, ghost mode, content protection)
 - **Orchestration backend**: `backend/` — FastAPI + WebSockets, managed via Poetry. Uses Deepgram SDK (nova-3 for ASR), NVIDIA API (Gemma 3n for LLM), DashScope/Aliyun (Qwen for vision analysis)
-- The app runs as a transparent, always-on-top overlay (`730×520` collapsed, `1200×520` expanded, frameless) designed to float over Zoom/Meet
+- The app runs as a transparent, always-on-top overlay (`730×730` collapsed, `1600×730` expanded, frameless) designed to float over Zoom/Meet
 - **Flow**: Microphone → PyAudio (16kHz PCM) → streamed to Deepgram Agent (ASR only) → transcription triggers LLM streaming via NVIDIA Gemma → Response chunks via WebSocket → Frontend renders Markdown + code blocks
 - **Screen capture**: Tauri command `capture_screen` in `src-tauri/src/lib.rs` uses the `xcap` crate to capture the first monitor, resizes to a max width of 1280 px, encodes as JPEG (quality 75), and returns base64 → stored in Zustand (`screenImages`, max 4) → VisionLLMService (Qwen) analyzes via separate WebSocket
 
@@ -213,7 +213,7 @@ Defined in `src-tauri/src/lib.rs`.
 - The `src-tauri/capabilities/default.json` grants `core:default`, `core:window:allow-start-dragging`, `core:window:allow-set-content-protected`, `core:window:allow-set-ignore-cursor-events`, `core:window:allow-set-size`, and `global-shortcut:default` permissions
 - `main.rs` sets `windows_subsystem = "windows"` in release mode — console output is suppressed on Windows
 - **`macos-private-api`** feature is enabled in `Cargo.toml` — required for transparent windows on macOS
-- Window config in `tauri.conf.json`: 730x520 (collapsed), resizable to 1200x520 (expanded), frameless, transparent, always-on-top, centered, visible, CSP disabled
+- Window config in `tauri.conf.json`: 730x730 (collapsed), resizable to 1600x730 (expanded), frameless, transparent, always-on-top, centered, visible, CSP disabled
 - Static atomic flags: `GHOST_MODE` (default false), `CONTENT_PROTECTED` (default true)
 - Commands: `toggle_always_on_top`, `toggle_content_protected`, `set_window_expanded`, `get_stealth_state`
 
