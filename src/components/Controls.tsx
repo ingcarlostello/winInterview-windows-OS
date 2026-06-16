@@ -1,4 +1,4 @@
-import { Mic, Pause, Play, Eye, EyeOff } from "lucide-react";
+import { Mic, Pause, Play, Eye, EyeOff, Square } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useInterviewStore } from "../stores/interview";
 import { useTranslation } from "../hooks/useTranslation";
@@ -95,11 +95,7 @@ export default function Controls({
                   : "border border-red/30 bg-red-500/20 text-red-400 hover:bg-red-500/30"
               }`}
             >
-              <span className="flex items-center gap-0.5">
-                <span className="w-0.5 h-2.5 bg-current rounded-full" />
-                <span className="w-0.5 h-3.5 bg-current rounded-full" />
-                <span className="w-0.5 h-2.5 bg-current rounded-full" />
-              </span>
+              <Square size={13} />
               {t("btnEnd")}
             </button>
           </>

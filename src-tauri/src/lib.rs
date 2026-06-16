@@ -80,7 +80,7 @@ fn toggle_content_protected(window: tauri::Window) -> bool {
 
 #[tauri::command]
 fn set_window_expanded(window: tauri::Window, expanded: bool) -> Result<(), String> {
-    let width = if expanded { 1200.0 } else { 730.0 };
+    let width = if expanded { 1400.0 } else { 730.0 };
     window
         .set_size(Size::Logical(LogicalSize { width, height: 730.0 }))
         .map_err(|e| e.to_string())

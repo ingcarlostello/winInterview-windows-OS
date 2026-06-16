@@ -127,10 +127,10 @@ export default function ScreenPanel() {
   return (
     <div className="h-full flex flex-col glass-base border-l border-white/10">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2.5 shrink-0">
+      <div className="flex items-center justify-between px-3 py-4 shrink-0">
         <div className="flex items-center gap-2">
           <Monitor className="text-accent" size={16} />
-          <span className="text-white font-semibold text-xs">Lector 2</span>
+          <span className="text-white font-semibold text-xs">{t("screenReader")}</span>
         </div>
         <button
           onClick={handleClear}
@@ -149,7 +149,7 @@ export default function ScreenPanel() {
             {screenImages.map((image, index) => (
               <div
                 key={index}
-                className="scan-line w-[120px] h-[120px] rounded-lg overflow-hidden border border-white/15 bg-black/20 shrink-0"
+                className={`scan-line ${isAnalyzingScreen ? "scan-active" : ""} w-[120px] h-[120px] rounded-lg overflow-hidden border border-white/15 bg-black/20 shrink-0`}
               >
                 <img
                   src={`data:image/jpeg;base64,${image}`}

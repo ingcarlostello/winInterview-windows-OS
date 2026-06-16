@@ -195,7 +195,7 @@
     overflow: hidden;
   }
 
-  .scan-line::after {
+  .scan-line.scan-active::after {
     content: "";
     position: absolute;
     left: 0;

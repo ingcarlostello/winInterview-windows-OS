@@ -79,7 +79,7 @@ export default function Overlay({
       : "";
 
   return (
-    <div data-theme={theme} className={`shadow-[0px_8px_48px_-8px_rgba(120,160,255,0.2),0px_2px_16px_rgba(255,255,255,0.06)] h-full flex flex-row ${bgClass} rounded-2xl border shadow-2xl transition-all duration-500 ${borderClass} ${auraClass} ${ghostMode ? "ghost-active" : ""} ${screenPanelOpen ? "w-[1200px]" : "w-[730px]"}`}>
+      <div data-theme={theme} className={`shadow-[0px_8px_48px_-8px_rgba(120,160,255,0.2),0px_2px_16px_rgba(255,255,255,0.06)] h-full flex flex-row ${bgClass} rounded-2xl border shadow-2xl transition-all duration-500 ${borderClass} ${auraClass} ${ghostMode ? "ghost-active" : ""} ${screenPanelOpen ? "w-[1400px]" : "w-[730px]"}`}>
       <div className="flex flex-col h-full w-[730px] flex-shrink-0">
         <StatusBar
           onChangeLanguage={onChangeLanguage}
