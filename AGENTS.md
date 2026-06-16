@@ -61,6 +61,7 @@ Single store at `src/stores/interview.ts` (persisted settings via `persist` midd
 | `showPromptEditor` | `boolean` | Prompt editor visibility |
 | `ghostMode` | `boolean` | Click-through mode |
 | `contentProtected` | `boolean` | Content protection (blur) |
+| `alwaysOnTop` | `boolean` | Window always-on-top state |
 | `theme` | `'dark' \| 'glass'` | Visual theme |
 | `screenPanelOpen` | `boolean` | Screen panel visibility |
 | `screenImage` | `string \| null` | Latest screen capture (base64) |
@@ -72,7 +73,7 @@ Single store at `src/stores/interview.ts` (persisted settings via `persist` midd
 
 Persisted settings: `customPrompts`, `language`, `theme`
 
-Actions: `setStatus`, `setLanguage`, `setTranscription`, `addResponseChunk`, `clearResponse`, `setError`, `incrementQuestionsAnswered`, `setCustomPrompt`, `clearCustomPrompt`, `setShowPromptEditor`, `toggleGhostMode`, `toggleContentProtected`, `setTheme`, `toggleScreenPanel`, `setScreenImage`, `addScreenImage`, `clearScreenImages`, `addScreenChunk`, `clearScreenChunks`, `setCapturingScreen`, `setAnalyzingScreen`, `setScreenPrompt`, `reset`
+Actions: `setStatus`, `setLanguage`, `setTranscription`, `addResponseChunk`, `clearResponse`, `setError`, `incrementQuestionsAnswered`, `setCustomPrompt`, `clearCustomPrompt`, `setShowPromptEditor`, `toggleGhostMode`, `toggleContentProtected`, `setAlwaysOnTop`, `setTheme`, `toggleScreenPanel`, `setScreenImage`, `addScreenImage`, `clearScreenImages`, `addScreenChunk`, `clearScreenChunks`, `setCapturingScreen`, `setAnalyzingScreen`, `setScreenPrompt`, `reset`
 
 ### Hooks
 
@@ -99,8 +100,8 @@ Actions: `setStatus`, `setLanguage`, `setTranscription`, `addResponseChunk`, `cl
 | Component | Purpose |
 |---|---|
 | `App.tsx` | Root — wires `useWebSocket().send` to `Overlay` callbacks. Listens for Tauri `capture-screen-shortcut` event and invokes `capture_screen` command. Invokes `set_window_expanded` Tauri command |
-| `Overlay.tsx` | Main layout — header bar (StatusBar + Controls), PromptEditor, Transcription, Response, QuestionCounter, ScreenPanel. Supports `dark` and `glass` themes. Ghost mode styling. Listens for Tauri `ghost-mode-changed` and `content-protected-changed` events |
-| `StatusBar.tsx` | Bot icon, theme toggle (Dark/Liquid), screen reader toggle, language selector, ghost mode badge, content protection badge, status dot with pulse animation, microphone icon, error text. Uses `data-tauri-drag-region` for window dragging |
+| `Overlay.tsx` | Main layout — header bar (StatusBar + Controls), PromptEditor, Transcription, Response, QuestionCounter, ScreenPanel. Supports `dark` and `glass` themes. Ghost mode styling. Listens for Tauri `ghost-mode-changed`, `content-protected-changed`, `always-on-top-changed` and `pause-resume-shortcut` events |
+| `StatusBar.tsx` | Bot icon, theme toggle (Dark/Liquid), screen reader toggle, language selector, ghost mode badge, content protection badge, always-on-top indicator (Pin/PinOff icon), status dot with pulse animation, microphone icon, error text. Uses `data-tauri-drag-region` for window dragging |
 | `Transcription.tsx` | Shows "Entrevistador" label + transcribed text in bordered box. Shows placeholder when no content |
 | `Response.tsx` | AI Copilot response area. Uses `react-markdown` + `remark-gfm` + `react-syntax-highlighter` (vscDarkPlus theme). Custom table styling. Blinking cursor (`▎`) during streaming. Three-dot animation while thinking. Copy button |
 | `Controls.tsx` | Connect/Listen button (idle/error), connecting spinner, Pause/Resume toggle, End/Disconnect button, content protection toggle (Eye/EyeOff icons). Invokes Tauri `toggle_content_protected` command |
@@ -201,9 +202,11 @@ All messages follow: `{"type": "...", "data": {...}}` (via `ConnectionManager`) 
 
 | Shortcut | Action |
 |---|---|
-| `Ctrl+Shift+Space` | Toggle `alwaysOnTop` for the Tauri window |
+| `Ctrl+Shift+Space` | Toggle `alwaysOnTop` for the Tauri window (emits `always-on-top-changed` event) |
 | `Ctrl+Shift+G` | Toggle ghost mode (click-through) |
 | `Ctrl+Shift+C` | Trigger screen capture (emits `capture-screen-shortcut` event) |
+| `Ctrl+Shift+P` | Pause / Resume listening (emits `pause-resume-shortcut` event) |
+| `Ctrl+Shift+B` | Toggle content protection (blur) |
 
 Defined in `src-tauri/src/lib.rs`.
 
@@ -215,6 +218,7 @@ Defined in `src-tauri/src/lib.rs`.
 - **`macos-private-api`** feature is enabled in `Cargo.toml` — required for transparent windows on macOS
 - Window config in `tauri.conf.json`: 730x730 (collapsed), resizable to 1600x730 (expanded), frameless, transparent, always-on-top, centered, visible, CSP disabled
 - Static atomic flags: `GHOST_MODE` (default false), `CONTENT_PROTECTED` (default true)
+- Window `alwaysOnTop` state is managed via `window.is_always_on_top()` (default true)
 - Commands: `toggle_always_on_top`, `toggle_content_protected`, `set_window_expanded`, `get_stealth_state`
 
 ## Other files

@@ -1,4 +1,4 @@
-import { Bot, Eye, Layers, Monitor, Minus, X } from "lucide-react";
+import { Bot, Eye, Layers, Monitor, Minus, Pin, PinOff, X } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useInterviewStore } from "../stores/interview";
 import type { Status } from "../stores/interview";
@@ -88,6 +88,7 @@ export default function StatusBar({ onChangeLanguage, onToggleScreenPanel }: Sta
   const status = useInterviewStore((s) => s.status);
   const ghostMode = useInterviewStore((s) => s.ghostMode);
   const contentProtected = useInterviewStore((s) => s.contentProtected);
+  const alwaysOnTop = useInterviewStore((s) => s.alwaysOnTop);
   const theme = useInterviewStore((s) => s.theme);
   const screenPanelOpen = useInterviewStore((s) => s.screenPanelOpen);
   const config = statusConfig[status];
@@ -119,7 +120,18 @@ export default function StatusBar({ onChangeLanguage, onToggleScreenPanel }: Sta
         <span data-tauri-drag-region className="text-white/30 text-[11px] font-medium select-none">
           InterviewCopilot
         </span>
-        <div className="w-[52px]" />
+        <div className="flex items-center justify-end w-[52px]">
+          <span
+            className="pointer-events-none"
+            title={alwaysOnTop ? t("alwaysOnTopOn") : t("alwaysOnTopOff")}
+          >
+            {alwaysOnTop ? (
+              <Pin size={12} className="text-accent" />
+            ) : (
+              <PinOff size={12} className="text-white/30" />
+            )}
+          </span>
+        </div>
       </div>
 
       {/* Row 2: Toolbar */}

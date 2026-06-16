@@ -120,7 +120,9 @@ pub fn run() {
                 if event.state() == ShortcutState::Pressed {
                     if let Some(window) = handle.get_webview_window("main") {
                         let always_on_top = window.is_always_on_top().unwrap_or(false);
-                        let _ = window.set_always_on_top(!always_on_top);
+                        let new_state = !always_on_top;
+                        let _ = window.set_always_on_top(new_state);
+                        let _ = window.emit("always-on-top-changed", new_state);
                     }
                 }
             })?;
@@ -144,6 +146,29 @@ pub fn run() {
                 if event.state() == ShortcutState::Pressed {
                     if let Some(window) = handle3.get_webview_window("main") {
                         let _ = window.emit("capture-screen-shortcut", ());
+                    }
+                }
+            })?;
+
+            // ── Ctrl+Shift+P → pause / resume listening ─────────────────
+            let handle4 = app.handle().clone();
+            app.global_shortcut().on_shortcut("Ctrl+Shift+P", move |_app, _shortcut, event| {
+                if event.state() == ShortcutState::Pressed {
+                    if let Some(window) = handle4.get_webview_window("main") {
+                        let _ = window.emit("pause-resume-shortcut", ());
+                    }
+                }
+            })?;
+
+            // ── Ctrl+Shift+B → toggle content protection ────────────────
+            let handle5 = app.handle().clone();
+            app.global_shortcut().on_shortcut("Ctrl+Shift+B", move |_app, _shortcut, event| {
+                if event.state() == ShortcutState::Pressed {
+                    if let Some(window) = handle5.get_webview_window("main") {
+                        let new_state = !CONTENT_PROTECTED.load(Ordering::SeqCst);
+                        CONTENT_PROTECTED.store(new_state, Ordering::SeqCst);
+                        let _ = window.set_content_protected(new_state);
+                        let _ = window.emit("content-protected-changed", new_state);
                     }
                 }
             })?;

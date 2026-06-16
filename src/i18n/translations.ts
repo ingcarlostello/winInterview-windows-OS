@@ -51,6 +51,8 @@ export type TranslationKey =
   | "themeGlass"
   | "ghostModeInvisibleOn"
   | "ghostModeInvisibleOff"
+  | "alwaysOnTopOn"
+  | "alwaysOnTopOff"
   | "waitingQuestion"
   | "pressListenToStart"
   | "copilotReady"
@@ -113,6 +115,8 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     themeGlass: "Glass",
     ghostModeInvisibleOn: "INVISIBLE: ON",
     ghostModeInvisibleOff: "INVISIBLE: OFF",
+    alwaysOnTopOn: "Fijado",
+    alwaysOnTopOff: "No fijado",
     promptPlaceholder:
       "Analiza la captura de pantalla y resuelve el problema técnico mostrado paso a paso, explicando la lógica.",
     waitingQuestion: "Esperando pregunta del entrevistador",
@@ -176,6 +180,8 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     themeGlass: "Glass",
     ghostModeInvisibleOn: "INVISIBLE: ON",
     ghostModeInvisibleOff: "INVISIBLE: OFF",
+    alwaysOnTopOn: "Pinned",
+    alwaysOnTopOff: "Unpinned",
     promptPlaceholder:
       "Analyze the screenshot and solve the technical problem shown step by step, explaining the logic.",
     waitingQuestion: "Waiting for interviewer question",
