@@ -8,8 +8,8 @@
 - **Orchestration backend**: `backend/` — FastAPI + WebSockets, managed via Poetry. Uses Deepgram SDK (nova-3 for ASR), NVIDIA API (Gemma 3n for LLM), DashScope/Aliyun (Qwen for vision analysis)
 - The app runs as a transparent, always-on-top overlay (`730×730` collapsed, `1600×730` expanded, frameless) designed to float over Zoom/Meet
 - **Flow**: Microphone → PyAudio (16kHz PCM) → streamed to Deepgram Agent (ASR only) → transcription triggers LLM streaming via NVIDIA Gemma → Response chunks via WebSocket → Frontend renders Markdown + code blocks
-- **Screen capture**: Tauri command `capture_screen` in `src-tauri/src/lib.rs` uses the `xcap` crate to capture the first monitor, resizes to a max width of 1280 px, encodes as JPEG (quality 75), and returns base64 → stored in Zustand (`screenImages`, max 4) → VisionLLMService (Qwen) analyzes via separate WebSocket
-- **Tier system**: Lite/Pro/Ultra plans gate features and quotas. Backend is the authority (`PlanGate`), Zustand is a UI cache (`planSlice`), Rust is a shortcut guardian (`update_plan_permissions`). Plan is passed as `?plan=` WS query param. No auth yet, no DB — in-memory `PlanRepository`, quotas reset per calendar month
+- **Screen capture**: Tauri command `capture_screen` in `src-tauri/src/lib.rs` uses the `xcap` crate to capture the first monitor, resizes to a max width of 1280 px, encodes as JPEG (quality 75), and returns base64 → stored in Zustand (`screenImages`, max 4). Each successful capture decrements `screen_captures` quota in Convex via `useCaptureQuota`. VisionLLMService (Qwen) analyzes captures via separate WebSocket
+- **Tier system**: Lite/Pro/Ultra plans gate features and quotas. **Convex is the source of truth** for `planId` and quota remaining; the Python backend reads them on every WebSocket connection via `ConvexClient` and enforces limits with `PlanGate`. Zustand (`planSlice`) caches the live state and receives updates from both the backend WebSocket (`PLAN_INFO`/`QUOTA_UPDATE`) and a reactive Convex query (`users.getCurrentUserPlanInfo`). Rust is a shortcut guardian (`update_plan_permissions`). Quotas reset per calendar month.
 
 ## Commands
 
@@ -90,6 +90,15 @@ Actions: `setStatus`, `setLanguage`, `setTranscription`, `addResponseChunk`, `cl
 - Auto-increments question counter when transitioning from `responding` to `listening`
 - Uses `mountedRef` to prevent state updates on unmounted components
 
+**`src/hooks/usePlanSync.ts`**:
+
+- Reactive Convex query (`users.getCurrentUserPlanInfo`) seeds `planInfo` into Zustand on app load (only when the store has no current plan info)
+- Provides the initial cross-session source of truth for plan features and quota counters
+
+**`src/hooks/useCaptureQuota.ts`**:
+
+- Exposes `decrementCapture()` to decrement `screen_captures` quota directly in Convex after a Tauri screen capture succeeds
+
 **`src/hooks/useTranslation.ts`**:
 
 - Wraps `t()` function from translations, bound to current store language
@@ -116,7 +125,7 @@ Actions: `setStatus`, `setLanguage`, `setTranscription`, `addResponseChunk`, `cl
 - `Controls.tsx` — content protection button shows Lock icon when `!invisible_mode`
 - `StatusBar.tsx` — Crown icon + plan name badge; ghost/invisible mode badges conditional on plan
 - `Overlay.tsx` — `useEffect` auto-disables `contentProtected` when plan lacks `invisible_mode`; shortcut event listeners gated by `canUseGhostMode`/`canUseInvisibleMode`
-- `ScreenPanel.tsx` — `MAX_CAPTURES` varies by `simultaneous_captures` feature; `capturesRemaining`/`capturesExceeded` shown; `custom_prompts` gate on textarea + analyze button with "Pro" badge + Lock icon; `?plan=` param on WS URL
+- `ScreenPanel.tsx` — `MAX_CAPTURES` varies by `simultaneous_captures` feature; `capturesRemaining`/`capturesExceeded` and `analysesRemaining`/`analysesExceeded` shown; `custom_prompts` gates only the prompt textarea ("Pro" badge + Lock icon); the analyze button is always available while quota remains and uses the default prompt when custom prompts are locked; `?token=` param on WS URL
 - `screenSlice.ts` — `canCaptureScreen()` checks plan features and quota
 
 ### Components
@@ -177,7 +186,10 @@ Actions: `setStatus`, `setLanguage`, `setTranscription`, `addResponseChunk`, `cl
 - `AgentSession` constructor accepts optional `audio_service`, `history`, `screen_capture` for test injection
 - `CommandParser` uses registry-based handler pattern (open/closed for new commands)
 - `PlanGate` per WS connection enforces feature gates and quota consumption; backend is the authority for tier validation
+- On every WebSocket connection the backend loads the user's `planId` and current quota remaining from Convex, so in-memory usage starts from the real persisted state
+- After each LLM response and on disconnect, `PlanGate` flushes consumed quota to Convex and the backend sends an updated `PLAN_INFO` message
 - Transcription quota exceeded → finish current LLM response, then pause with upgrade message
+- When quota expires automatically via timer (`_expire_session`), remaining seconds are consumed and flushed to Convex immediately before pausing — no need to wait for disconnect
 
 ### Modules
 
@@ -185,12 +197,13 @@ Actions: `setStatus`, `setLanguage`, `setTranscription`, `addResponseChunk`, `cl
 |---|---|
 | `config.py` | Pydantic settings: `deepgram_api_key`, `nvidia_api_key`, `dashscope_api_key`, `host`, `port` |
 | `tiers.py` | `PlanId` (LITE/PRO/ULTRA), `Feature` (CUSTOM_PROMPTS, SIMULTANEOUS_CAPTURES, SIMULTANEOUS_ANALYSIS, KEYBOARD_SHORTCUTS, INVISIBLE_MODE, GHOST_MODE), `Quota` (TRANSCRIPTION_SECONDS, SCREEN_CAPTURES, SCREEN_ANALYSES) enums. `PlanDefinition` dataclass. `PLANS` dict with per-plan features/quotas. Helper functions: `get_plan()`, `has_feature()`, `get_quota_limit()` |
-| `plan_gate.py` | `FeatureBlockedError`, `QuotaExceededError` exceptions. `PlanGate` class: `require_feature()`, `can_use_feature()`, `consume_quota()`, `get_remaining()`, `get_usage_summary()`, `get_plan_info()`. Per-connection in-memory usage tracking |
+| `convex_client.py` | Authenticated HTTP client for the Python backend to call Convex HTTP actions (`/api/users/get`, `/api/quotas/decrement`) |
+| `plan_gate.py` | `FeatureBlockedError`, `QuotaExceededError` exceptions. `PlanGate` class: initializes usage from Convex remaining, enforces feature/quotas in-memory, and flushes consumption to Convex via `ConvexClient` |
 | `context.py` | `ConversationHistory` — message list management (system prompt + user/assistant messages, max 20, auto-trim). Used by `AgentSession` |
 | `dependencies.py` | DI singletons: `get_connection_manager()`, `get_llm_service()` (DeepSeekLLMService), `get_vision_service()` (VisionLLMService) |
 | `ws_manager.py` | `ConnectionManager` with typed sends using `WsMessageType`/`WsStatus` enums: `send_status`, `send_transcription`, `send_response_chunk`, `send_error`, `send_screen_chunk`, `send_screen_image` |
-| `ws/handler.py` | `websocket_endpoint` FastAPI handler. Creates `AgentSession` with language/prompt from query params. Reads `?plan=` query param, creates `PlanGate`, injects into `AgentSession`. Uses `CommandParser` via `create_default_parser()` |
-| `ws/session.py` | `AgentSession` class (~240 lines). Pure coordinator: wires `AudioStreamingService` ↔ `ConversationHistory` ↔ LLM/Vision ↔ WebSocket. Accepts optional `audio_service`, `history` params for DI/testing. `DialogCoordinator` inner class handles business logic with `PlanGate` integration. `_send_plan_info()` on connect. Feature gates on set/clear_prompt |
+| `ws/handler.py` | `websocket_endpoint` FastAPI handler. Verifies Clerk JWT from `?token=`, fetches plan/quotas from Convex via `ConvexClient`, creates `PlanGate`, and injects into `AgentSession`. Language/prompt come from query params. Uses `CommandParser` via `create_default_parser()` |
+| `ws/session.py` | `AgentSession` class (~240 lines). Pure coordinator: wires `AudioStreamingService` ↔ `ConversationHistory` ↔ LLM/Vision ↔ WebSocket. Accepts optional `audio_service`, `history` params for DI/testing. `DialogCoordinator` inner class handles business logic with `PlanGate` integration. `_send_plan_info()` on connect and after each flush. Feature gates on set/clear_prompt |
 | `ws/commands.py` | `WsCommand` enum: PAUSE, RESUME, CLEAR, SET_LANGUAGE, SET_PROMPT, CLEAR_PROMPT, CAPTURE_SCREEN. `ParsedCommand` dataclass |
 | `ws/command_parser.py` | `CommandParser` with registry-based handler pattern. `ExactMatchHandler` (no-payload commands), `PrefixMatchHandler` (colon-delimited payload). `create_default_parser()` factory |
 | `ws/message_types.py` | `WsMessageType` enum (STATUS, TRANSCRIPTION, CHUNK, ERROR, SCREEN_CHUNK, SCREEN_IMAGE, PLAN_INFO, QUOTA_UPDATE) and `WsStatus` enum (CONNECTED, LISTENING, THINKING, RESPONDING, PAUSED, RECONNECTING, CLEARED, CAPTURING, ANALYZING, COMPLETED, PROMPT_SAVED, PROMPT_CLEARED, QUOTA_EXCEEDED, FEATURE_BLOCKED) |
@@ -204,7 +217,7 @@ Actions: `setStatus`, `setLanguage`, `setTranscription`, `addResponseChunk`, `cl
 | `llm/vision.py` | `VisionLLMService` for screen analysis. Aliyun/DashScope endpoint, model `qwen3.6-plus`. `analyze_screen()`, `analyze_multiple_screens()`. Max tokens 16384, temperature 0.60, thinking enabled |
 | `screen/capture.py` | Reserved/legacy module (currently empty). Screen capture is implemented in the Tauri Rust layer at `src-tauri/src/lib.rs` |
 | `routers/prompts.py` | REST API: `GET /prompt?lang=`, `POST /prompt`, `DELETE /prompt?lang=` |
-| `routers/screens.py` | WebSocket: `/api/ws/analyze-screens` accepts JSON with images array + prompt, streams vision analysis chunks. Uses `WsMessageType` enum. PlanGate per connection; gates SIMULTANEOUS_ANALYSIS and SCREEN_ANALYSES quota |
+| `routers/screens.py` | WebSocket: `/api/ws/analyze-screens` accepts `?token=`, verifies the Clerk JWT, fetches plan/quotas from Convex, then receives JSON with images array + prompt and streams vision analysis chunks. Uses `WsMessageType` enum. `PlanGate` per connection; gates `SIMULTANEOUS_ANALYSIS` and `SCREEN_ANALYSES` quota; flushes consumption to Convex on close |
 
 ### WebSocket Message Format
 

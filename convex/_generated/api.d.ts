@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as backend from "../backend.js";
 import type * as constants from "../constants.js";
 import type * as http from "../http.js";
 import type * as list_users from "../list_users.js";
@@ -22,6 +23,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  backend: typeof backend;
   constants: typeof constants;
   http: typeof http;
   list_users: typeof list_users;

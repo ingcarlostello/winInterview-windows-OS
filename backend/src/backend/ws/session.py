@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 
 from fastapi import WebSocket
 
@@ -27,24 +28,18 @@ class DialogCoordinator:
         self.history = history
         self.plan_gate = plan_gate
         
-        self.on_state_change = None 
+        self.on_state_change = None
         self.on_chunk_received = None
         self.on_error = None
         self.on_transcription_received = None
         self.on_quota_exceeded = None
+        self.on_flushed = None
+        self.on_quota_consumed = None
 
-    async def handle_transcription(self, text: str):
+    async def handle_transcription(self, text: str, speech_duration: float = 0.0):
         if self.on_transcription_received:
             await self.on_transcription_received(text)
-        
-        estimated_seconds = max(1, len(text.split()) // 3)
-        try:
-            self.plan_gate.consume_quota(Quota.TRANSCRIPTION_SECONDS, estimated_seconds)
-        except QuotaExceededError:
-            if self.on_quota_exceeded:
-                await self.on_quota_exceeded()
-            return
-            
+
         if self.on_state_change:
             await self.on_state_change(WsStatus.THINKING)
             
@@ -74,6 +69,8 @@ class DialogCoordinator:
             
         try:
             await self.plan_gate.flush_to_convex()
+            if self.on_flushed:
+                await self.on_flushed()
         except Exception as e:
             logger.error(f"Failed to flush to Convex after response: {e}")
 
@@ -100,6 +97,8 @@ class AgentSession:
         self.manager = manager
         self.vision_service = vision_service
         self.plan_gate = plan_gate
+        self._session_start_time: float | None = None
+        self._quota_expiry_task: asyncio.Task | None = None
 
         self.language = initial_language if initial_language in ("es", "en") else "es"
         self._loop = asyncio.get_running_loop()
@@ -126,6 +125,8 @@ class AgentSession:
         self.coordinator.on_error = self._send_error
         self.coordinator.on_transcription_received = self._send_transcription
         self.coordinator.on_quota_exceeded = self._on_quota_exceeded
+        self.coordinator.on_flushed = self._send_plan_info
+        self.coordinator.on_quota_consumed = self._send_quota_update
 
         self.audio.on_transcription = self.coordinator.handle_transcription
         self.audio.on_user_started_speaking = self._on_user_started_speaking
@@ -150,15 +151,41 @@ class AgentSession:
             self.plan_gate.get_plan_info(),
         )
 
+    async def _send_quota_update(self, speech_active: bool = False) -> None:
+        data = self.plan_gate.get_plan_info()
+        data["speech_active"] = speech_active
+        await self.manager.send(
+            self.session_id,
+            WsMessageType.QUOTA_UPDATE,
+            data,
+        )
+
     async def _on_quota_exceeded(self) -> None:
         await self.audio.pause()
         await self._send_status(WsStatus.QUOTA_EXCEEDED)
         await self._send_error("Transcription quota exceeded. Upgrade your plan to continue.")
 
+    async def _expire_session(self, seconds: int) -> None:
+        try:
+            await asyncio.sleep(seconds)
+            logger.info(f"Session {self.session_id} quota expired after {seconds}s")
+            
+            remaining = self.plan_gate.get_remaining(Quota.TRANSCRIPTION_SECONDS)
+            if remaining > 0:
+                self.plan_gate.consume_quota(Quota.TRANSCRIPTION_SECONDS, remaining)
+                logger.info(f"Session {self.session_id} consumed remaining {remaining}s on quota expiry")
+            
+            await self.plan_gate.flush_to_convex()
+            await self._on_quota_exceeded()
+        except asyncio.CancelledError:
+            pass
+
     async def start(self) -> bool:
         await self.manager.connect(self.session_id, self.websocket)
         await self._send_status(WsStatus.CONNECTED)
         await self._send_plan_info()
+
+        self._session_start_time = time.time()
 
         logger.info(f"Session {self.session_id} initialized with language '{self.language}'")
         logger.info(f"System prompt for session: {self.history.messages[0]['content'][:150]}...")
@@ -168,13 +195,34 @@ class AgentSession:
             await self.stop()
             return False
 
+        remaining = self.plan_gate.get_remaining(Quota.TRANSCRIPTION_SECONDS)
+        if remaining > 0:
+            self._quota_expiry_task = asyncio.create_task(self._expire_session(remaining))
+
         await self._send_status(WsStatus.LISTENING)
         return True
 
     async def stop(self) -> None:
+        if self._quota_expiry_task is not None:
+            self._quota_expiry_task.cancel()
+            try:
+                await self._quota_expiry_task
+            except asyncio.CancelledError:
+                pass
+            self._quota_expiry_task = None
+
         await self.audio.stop()
         try:
+            if self._session_start_time is not None:
+                session_duration = int(time.time() - self._session_start_time)
+                if session_duration > 0:
+                    remaining = self.plan_gate.get_remaining(Quota.TRANSCRIPTION_SECONDS)
+                    consumable = min(session_duration, max(0, remaining))
+                    if consumable > 0:
+                        self.plan_gate.consume_quota(Quota.TRANSCRIPTION_SECONDS, consumable)
+                        logger.info(f"Session {self.session_id} consumed {consumable}s of transcription quota (session was {session_duration}s)")
             await self.plan_gate.flush_to_convex()
+            await self._send_plan_info()
         except Exception as e:
             logger.error(f"Failed to flush to Convex on stop: {e}")
         self.manager.disconnect(self.session_id)
@@ -196,7 +244,9 @@ class AgentSession:
         await self._send_status(WsStatus.PAUSED)
 
     async def _handle_resume(self, cmd: ParsedCommand) -> None:
-        await self.audio.resume()
+        if not await self.audio.resume():
+            await self._send_error("Agent reconnection timeout")
+            return
         await self._send_status(WsStatus.LISTENING)
 
     async def _handle_clear(self, cmd: ParsedCommand) -> None:
@@ -247,3 +297,4 @@ class AgentSession:
 
     async def _on_user_started_speaking(self) -> None:
         await self._send_status(WsStatus.LISTENING)
+        await self._send_quota_update(speech_active=True)

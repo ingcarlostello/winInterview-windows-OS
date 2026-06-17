@@ -1,10 +1,22 @@
-import { Bot, Crown, Eye, Layers, Monitor, Minus, Pin, PinOff, X } from "lucide-react";
+import {
+  Bot,
+  Crown,
+  Eye,
+  Layers,
+  Monitor,
+  Minus,
+  Pin,
+  PinOff,
+  X,
+  Clock,
+} from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useInterviewStore } from "../stores/interview";
 import type { Status } from "../stores/interview";
 import LanguageSelector from "./LanguageSelector";
+import SessionTimer from "./SessionTimer";
 import { useTranslation } from "../hooks/useTranslation";
-import { useFeatureGate } from "../hooks/useFeatureGate";
+import { useFeatureGate, useQuotaInfo } from "../hooks/useFeatureGate";
 
 type StatusStyle = {
   labelKey: string;
@@ -85,7 +97,10 @@ interface StatusBarProps {
   onToggleScreenPanel?: () => void;
 }
 
-export default function StatusBar({ onChangeLanguage, onToggleScreenPanel }: StatusBarProps) {
+export default function StatusBar({
+  onChangeLanguage,
+  onToggleScreenPanel,
+}: StatusBarProps) {
   const status = useInterviewStore((s) => s.status);
   const ghostMode = useInterviewStore((s) => s.ghostMode);
   const contentProtected = useInterviewStore((s) => s.contentProtected);
@@ -97,10 +112,33 @@ export default function StatusBar({ onChangeLanguage, onToggleScreenPanel }: Sta
   const { t } = useTranslation();
   const { allowed: canUseGhostMode } = useFeatureGate("ghost_mode");
   const { allowed: canUseInvisibleMode } = useFeatureGate("invisible_mode");
+  const { remaining: transcriptionRemaining, exceeded: transcriptionExceeded } =
+    useQuotaInfo("transcription_seconds");
+  const liveTranscriptionRemaining = useInterviewStore(
+    (s) => s.liveTranscriptionRemaining,
+  );
+  const countdownActive = useInterviewStore((s) => s.countdownActive);
 
   const planName = planInfo?.plan_name ?? "Lite";
   const planId = planInfo?.plan_id ?? "lite";
-  const planColorClass = planId === "ultra" ? "text-purple-400" : planId === "pro" ? "text-amber" : "text-white/50";
+  const planColorClass =
+    planId === "ultra"
+      ? "text-purple-400"
+      : planId === "pro"
+        ? "text-amber"
+        : "text-white/50";
+
+  const effectiveRemaining =
+    countdownActive && liveTranscriptionRemaining !== null
+      ? liveTranscriptionRemaining
+      : transcriptionRemaining;
+  const minutesLeft = Math.max(0, Math.floor(effectiveRemaining / 60));
+  const isLowQuota = !transcriptionExceeded && minutesLeft <= 2;
+  const quotaBadgeClass = transcriptionExceeded
+    ? "border-red-500/40 bg-red-500/15 text-red-400"
+    : isLowQuota
+      ? "border-amber/40 bg-amber/15 text-amber"
+      : "border-success/40 bg-success-soft text-success";
 
   const handleClose = () => getCurrentWindow().close();
   const handleMinimize = () => getCurrentWindow().minimize();
@@ -108,7 +146,10 @@ export default function StatusBar({ onChangeLanguage, onToggleScreenPanel }: Sta
   return (
     <>
       {/* Row 1: Window controls + drag region */}
-      <div data-tauri-drag-region className="flex items-center justify-between pl-3 pr-3 h-[50px] shrink-0 mb-5 border-b border-white/10 bg-white/5">
+      <div
+        data-tauri-drag-region
+        className="flex items-center justify-between pl-3 pr-3 h-[50px] shrink-0 mb-5 border-b border-white/10 bg-white/5"
+      >
         <div className="flex items-center gap-1.5">
           <button
             onClick={handleClose}
@@ -125,10 +166,40 @@ export default function StatusBar({ onChangeLanguage, onToggleScreenPanel }: Sta
             <Minus size={11} strokeWidth={2.5} />
           </button>
         </div>
-        <span data-tauri-drag-region className="text-white/30 text-[11px] font-medium select-none">
-          InterviewCopilot
-        </span>
-        <div className="flex items-center justify-end w-[52px]">
+
+        <div className="flex items-center">
+          <span
+            data-tauri-drag-region
+            className="text-white text-[11px] font-medium select-none"
+          >
+            InterviewCopilot
+          </span>
+          <button
+            onClick={() =>
+              useInterviewStore
+                .getState()
+                .setTheme(theme === "dark" ? "glass" : "dark")
+            }
+            className={`ml-4 flex items-center gap-1.5 px-2.5 py-1 rounded-full transition-all group ${
+              theme === "glass"
+                ? "glass-button-active"
+                : "border border-white/10 bg-white/5 hover:bg-white/10 text-white/60 hover:text-white cursor-pointer"
+            }`}
+            title={theme === "dark" ? "Cambiar a Glass" : "Cambiar a Dark"}
+          >
+            <Layers
+              size={12}
+              className={
+                theme === "glass" ? "" : "text-white/60 group-hover:text-white"
+              }
+            />
+            <span className="text-[10px] font-medium">
+              {theme === "dark" ? "Dark" : t("themeGlass")}
+            </span>
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2">
           <span
             className="pointer-events-none"
             title={alwaysOnTop ? t("alwaysOnTopOn") : t("alwaysOnTopOff")}
@@ -139,6 +210,13 @@ export default function StatusBar({ onChangeLanguage, onToggleScreenPanel }: Sta
               <PinOff size={12} className="text-white/30" />
             )}
           </span>
+
+          <div
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-white/10 bg-white/5 ${planColorClass}`}
+          >
+            <Crown size={12} />
+            <span className="text-[10px] font-medium">{planName}</span>
+          </div>
         </div>
       </div>
 
@@ -149,25 +227,21 @@ export default function StatusBar({ onChangeLanguage, onToggleScreenPanel }: Sta
             <Bot className="text-accent" size={20} />
           </div>
 
-          <button
-            onClick={() => useInterviewStore.getState().setTheme(theme === "dark" ? "glass" : "dark")}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full transition-all group ${
-              theme === "glass"
-                ? "glass-button-active"
-                : "border border-white/10 bg-white/5 hover:bg-white/10 text-white/60 hover:text-white cursor-pointer"
-            }`}
-            title={theme === "dark" ? "Cambiar a Glass" : "Cambiar a Dark"}
+          <div
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-full border ${quotaBadgeClass}`}
+            title={
+              transcriptionExceeded
+                ? t("quotaExhaustedTooltip")
+                : t("timeRemaining", { count: minutesLeft })
+            }
           >
-            <Layers size={12} className={theme === "glass" ? "" : "text-white/60 group-hover:text-white"} />
+            <Clock size={12} />
             <span className="text-[10px] font-medium">
-              {theme === "dark" ? "Dark" : t("themeGlass")}
+              {transcriptionExceeded ? "0m" : `${minutesLeft}m`}
             </span>
-          </button>
-
-          <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-white/10 bg-white/5 ${planColorClass}`}>
-            <Crown size={12} />
-            <span className="text-[10px] font-medium">{planName}</span>
           </div>
+
+          <SessionTimer />
 
           {onToggleScreenPanel && (
             <button
@@ -180,7 +254,9 @@ export default function StatusBar({ onChangeLanguage, onToggleScreenPanel }: Sta
               title={t("screenReader")}
             >
               <Monitor size={12} />
-              <span className="text-[10px] font-medium">{t("screenReader")}</span>
+              <span className="text-[10px] font-medium">
+                {t("screenReader")}
+              </span>
             </button>
           )}
         </div>
@@ -189,23 +265,40 @@ export default function StatusBar({ onChangeLanguage, onToggleScreenPanel }: Sta
 
         <div className="flex items-center gap-1.5 shrink-0">
           {ghostMode && canUseGhostMode && (
-            <div className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl border transition-colors ${
-              contentProtected && canUseInvisibleMode
-                ? "bg-danger-soft/50 border-danger/20"
-                : "bg-white/5 border-white/10"
-            }`}>
-              <Eye size={14} className={contentProtected && canUseInvisibleMode ? "text-danger" : "text-white/40"} />
+            <div
+              className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl border transition-colors ${
+                contentProtected && canUseInvisibleMode
+                  ? "bg-danger-soft/50 border-danger/20"
+                  : "bg-white/5 border-white/10"
+              }`}
+            >
+              <Eye
+                size={14}
+                className={
+                  contentProtected && canUseInvisibleMode
+                    ? "text-danger"
+                    : "text-white/40"
+                }
+              />
               <div>
-                <div className={`text-[10px] font-medium leading-tight ${contentProtected && canUseInvisibleMode ? "text-danger" : "text-white/60"}`}>
+                <div
+                  className={`text-[10px] font-medium leading-tight ${contentProtected && canUseInvisibleMode ? "text-danger" : "text-white/60"}`}
+                >
                   {t("ghostModeOn")}
                 </div>
-                <div className={`text-[9px] leading-tight ${contentProtected && canUseInvisibleMode ? "text-danger/60" : "text-white/30"}`}>
-                  {contentProtected && canUseInvisibleMode ? t("ghostModeInvisibleOn") : t("ghostModeInvisibleOff")}
+                <div
+                  className={`text-[9px] leading-tight ${contentProtected && canUseInvisibleMode ? "text-danger/60" : "text-white/30"}`}
+                >
+                  {contentProtected && canUseInvisibleMode
+                    ? t("ghostModeInvisibleOn")
+                    : t("ghostModeInvisibleOff")}
                 </div>
               </div>
             </div>
           )}
-          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors ${config.pillStyle}`}>
+          <span
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors ${config.pillStyle}`}
+          >
             <span className="relative flex h-2 w-2">
               <span
                 className={`absolute inline-flex h-full w-full rounded-full ${config.dotColor} ${config.pulse ? "animate-ping opacity-75" : ""}`}
@@ -216,11 +309,34 @@ export default function StatusBar({ onChangeLanguage, onToggleScreenPanel }: Sta
             </span>
             {t(config.labelKey as Parameters<typeof t>[0])}
             {config.showMic && (
-              <svg className="w-3.5 h-3.5 animate-pulse" viewBox="0 0 24 24" fill="currentColor">
+              <svg
+                className="w-3.5 h-3.5 animate-pulse"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+              >
                 <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                <path d="M19 10v2a7 7 0 0 1-14 0v-2" fill="none" stroke="currentColor" strokeWidth="2" />
-                <line x1="12" y1="19" x2="12" y2="23" stroke="currentColor" strokeWidth="2" />
-                <line x1="8" y1="23" x2="16" y2="23" stroke="currentColor" strokeWidth="2" />
+                <path
+                  d="M19 10v2a7 7 0 0 1-14 0v-2"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                />
+                <line
+                  x1="12"
+                  y1="19"
+                  x2="12"
+                  y2="23"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                />
+                <line
+                  x1="8"
+                  y1="23"
+                  x2="16"
+                  y2="23"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                />
               </svg>
             )}
           </span>

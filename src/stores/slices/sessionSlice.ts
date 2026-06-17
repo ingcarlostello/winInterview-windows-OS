@@ -9,6 +9,7 @@ export interface SessionSlice {
   responseChunks: string[];
   error: string | null;
   questionsAnswered: number;
+  sessionStartTime: number | null;
   setStatus: (status: Status) => void;
   setTranscription: (text: string) => void;
   addResponseChunk: (chunk: string) => void;
@@ -16,6 +17,7 @@ export interface SessionSlice {
   setError: (error: string) => void;
   clearAll: () => void;
   incrementQuestionsAnswered: () => void;
+  setSessionStartTime: (time: number | null) => void;
 }
 
 export const createSessionSlice: StateCreator<RootState, [], [], SessionSlice> = (set) => ({
@@ -24,6 +26,7 @@ export const createSessionSlice: StateCreator<RootState, [], [], SessionSlice> =
   responseChunks: [],
   error: null,
   questionsAnswered: 0,
+  sessionStartTime: null,
   setStatus: (status) => set({ status }),
   setTranscription: (text) => set({ transcription: text }),
   addResponseChunk: (chunk) =>
@@ -35,4 +38,5 @@ export const createSessionSlice: StateCreator<RootState, [], [], SessionSlice> =
   setError: (error) => set({ error, status: "error" }),
   incrementQuestionsAnswered: () =>
     set((state) => ({ questionsAnswered: state.questionsAnswered + 1 })),
+  setSessionStartTime: (time) => set({ sessionStartTime: time }),
 });

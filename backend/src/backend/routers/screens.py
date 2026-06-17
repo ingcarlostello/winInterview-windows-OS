@@ -5,6 +5,8 @@ from typing import List
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
+from backend.auth.clerk import verify_clerk_token
+from backend.convex_client import ConvexClient
 from backend.dependencies import get_vision_service
 from backend.plan_gate import FeatureBlockedError, PlanGate, QuotaExceededError
 from backend.tiers import Feature, PlanId, Quota
@@ -26,12 +28,40 @@ async def analyze_screens_ws(websocket: WebSocket):
     await websocket.accept()
     session_id = str(uuid.uuid4())
 
-    plan_id_str = websocket.query_params.get("plan", "lite")
+    token = websocket.query_params.get("token")
+    clerk_id = None
+    if token:
+        try:
+            payload = verify_clerk_token(token)
+            clerk_id = payload.get("sub")
+        except Exception as e:
+            logger.error(f"Screen analysis token validation failed: {e}")
+
+    if not clerk_id:
+        await websocket.send_json({
+            "type": WsMessageType.ERROR,
+            "message": "Authentication required",
+        })
+        await websocket.close()
+        return
+
+    convex_client = ConvexClient()
+    plan_id = PlanId.LITE
+    remaining = None
     try:
-        plan_id = PlanId(plan_id_str)
-    except ValueError:
-        plan_id = PlanId.LITE
-    plan_gate = PlanGate(plan_id=plan_id)
+        result = await convex_client.get_user_and_quota(clerk_id)
+        if result:
+            plan_id, remaining = result
+            logger.info(f"Screen analysis {session_id} loaded plan {plan_id.value} from Convex")
+    except Exception as e:
+        logger.error(f"Failed to load plan from Convex for screen analysis {session_id}: {e}")
+
+    plan_gate = PlanGate(
+        plan_id=plan_id,
+        remaining=remaining,
+        clerk_id=clerk_id,
+        convex_client=convex_client,
+    )
 
     try:
         data = await websocket.receive_json()
@@ -79,6 +109,19 @@ async def analyze_screens_ws(websocket: WebSocket):
                 "content": chunk
             })
 
+        try:
+            await plan_gate.flush_to_convex()
+        except Exception as e:
+            logger.error(f"Failed to flush screen analysis quota to Convex: {e}")
+
+        try:
+            await websocket.send_json({
+                "type": WsMessageType.PLAN_INFO,
+                **plan_gate.get_plan_info(),
+            })
+        except Exception as e:
+            logger.error(f"Failed to send plan_info for screen analysis {session_id}: {e}")
+
         await websocket.send_json({
             "type": WsMessageType.STATUS,
             "status": "completed"
@@ -96,6 +139,10 @@ async def analyze_screens_ws(websocket: WebSocket):
         except Exception:
             pass
     finally:
+        try:
+            await plan_gate.flush_to_convex()
+        except Exception as e:
+            logger.error(f"Failed to flush screen analysis quota to Convex: {e}")
         try:
             await websocket.close()
         except Exception:

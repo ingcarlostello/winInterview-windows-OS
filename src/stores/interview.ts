@@ -30,6 +30,9 @@ export const useInterviewStore = create<RootState>()(
           error: null,
           questionsAnswered: 0,
           planInfo: null,
+          liveTranscriptionRemaining: null,
+          countdownActive: false,
+          sessionStartTime: null,
         });
       },
     }),

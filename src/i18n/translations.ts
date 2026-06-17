@@ -47,6 +47,8 @@ export type TranslationKey =
   | "analyzeScreens"
   | "analyzing"
   | "captureLimitReached"
+  | "analysesRemaining"
+  | "analysesQuotaExceeded"
   | "promptPlaceholder"
   | "themeGlass"
   | "ghostModeInvisibleOn"
@@ -63,7 +65,11 @@ export type TranslationKey =
   | "badgeThinking"
   | "badgeResponding"
   | "quotaExceeded"
-  | "capturesRemaining";
+  | "capturesRemaining"
+  | "quotaExhausted"
+  | "quotaExhaustedTooltip"
+  | "timeRemaining"
+  | "sessionTimeTooltip";
 
 const translations: Record<Language, Record<TranslationKey, string>> = {
   es: {
@@ -113,7 +119,9 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     promptForLLM: "PROMPT PARA EL LLM",
     analyzeScreens: "Analizar capturas",
     analyzing: "Analizando...",
-    captureLimitReached: "Límite de 4 capturas alcanzado",
+    captureLimitReached: "Límite de {count} capturas alcanzado",
+    analysesRemaining: "análisis restantes este mes",
+    analysesQuotaExceeded: "Cuota de análisis agotada.",
     themeGlass: "Glass",
     ghostModeInvisibleOn: "INVISIBLE: ON",
     ghostModeInvisibleOff: "INVISIBLE: OFF",
@@ -132,6 +140,10 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     badgeResponding: "RESPONDIENDO",
     quotaExceeded: "Cuota agotada. Mejora tu plan.",
     capturesRemaining: "capturas restantes este mes",
+    quotaExhausted: "Cuota agotada - Actualizar",
+    quotaExhaustedTooltip: "Has usado todos tus minutos de transcripción. Actualiza tu plan para continuar.",
+    timeRemaining: "{count}m restantes",
+    sessionTimeTooltip: "Tiempo de sesión transcurrido",
   },
   en: {
     statusDisconnected: "Disconnected",
@@ -180,7 +192,9 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     promptForLLM: "PROMPT FOR THE LLM",
     analyzeScreens: "Analyze captures",
     analyzing: "Analyzing...",
-    captureLimitReached: "Limit of 4 captures reached",
+    captureLimitReached: "Limit of {count} captures reached",
+    analysesRemaining: "analyses remaining this month",
+    analysesQuotaExceeded: "Analysis quota exhausted.",
     themeGlass: "Glass",
     ghostModeInvisibleOn: "INVISIBLE: ON",
     ghostModeInvisibleOff: "INVISIBLE: OFF",
@@ -199,6 +213,10 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     badgeResponding: "RESPONDING",
     quotaExceeded: "Quota exceeded. Upgrade your plan.",
     capturesRemaining: "captures remaining this month",
+    quotaExhausted: "Quota exhausted - Upgrade",
+    quotaExhaustedTooltip: "You've used all your transcription minutes. Upgrade your plan to continue.",
+    timeRemaining: "{count}m left",
+    sessionTimeTooltip: "Session time elapsed",
   },
 };
 
