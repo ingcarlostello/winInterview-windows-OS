@@ -4,6 +4,7 @@ import { useInterviewStore } from "../stores/interview";
 import type { Status } from "../stores/interview";
 import type { PlanInfo } from "../stores/slices/planSlice";
 import { WS_MESSAGE_TYPE, WS_STATUS } from "../constants/ws";
+import { useAuth } from "@clerk/clerk-react";
 
 const WS_BASE = "ws://localhost:8000/ws";
 
@@ -13,6 +14,7 @@ interface WSMessage {
 }
 
 export function useWebSocket() {
+  const { getToken, isLoaded, isSignedIn } = useAuth();
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
@@ -44,9 +46,10 @@ export function useWebSocket() {
     reset();
   }, [reset]);
 
-  const connect = useCallback(() => {
+  const connect = useCallback(async () => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
     if (wsRef.current?.readyState === WebSocket.CONNECTING) return;
+    if (!isLoaded || !isSignedIn) return;
 
     intentionalCloseRef.current = false;
 
@@ -57,12 +60,15 @@ export function useWebSocket() {
 
     setStatus("connected");
 
-    const language = useInterviewStore.getState().language;
-    const customPrompt = useInterviewStore.getState().getCustomPrompt();
-    const planId = useInterviewStore.getState().planInfo?.plan_id ?? "lite";
-    const promptParam = customPrompt.trim() ? `&prompt=${encodeURIComponent(customPrompt.trim())}` : "";
-    const ws = new WebSocket(`${WS_BASE}?lang=${language}&plan=${planId}${promptParam}`);
-    wsRef.current = ws;
+    try {
+      const token = await getToken();
+      const language = useInterviewStore.getState().language;
+      const customPrompt = useInterviewStore.getState().getCustomPrompt();
+      const planId = useInterviewStore.getState().planInfo?.plan_id ?? "lite";
+      const promptParam = customPrompt.trim() ? `&prompt=${encodeURIComponent(customPrompt.trim())}` : "";
+      
+      const ws = new WebSocket(`${WS_BASE}?lang=${language}&plan=${planId}&token=${token}${promptParam}`);
+      wsRef.current = ws;
 
     ws.onopen = () => {
       setStatus("connected");
@@ -174,7 +180,10 @@ export function useWebSocket() {
     ws.onerror = () => {
       ws.close();
     };
-  }, [setStatus, setTranscription, addResponseChunk, clearResponse, clearAll, setError, incrementQuestionsAnswered, setPlanInfo, updateQuota]);
+    } catch (e) {
+      console.error("[WS] Failed to get Clerk token or connect:", e);
+    }
+  }, [setStatus, setTranscription, addResponseChunk, clearResponse, clearAll, setError, incrementQuestionsAnswered, setPlanInfo, updateQuota, getToken, isLoaded, isSignedIn]);
 
   useEffect(() => {
     connectRef.current = connect;

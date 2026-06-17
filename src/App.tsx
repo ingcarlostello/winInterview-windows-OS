@@ -4,6 +4,8 @@ import Overlay from "./components/Overlay";
 import { useWebSocket } from "./hooks/useWebSocket";
 import { useInterviewStore } from "./stores/interview";
 import { invoke } from "@tauri-apps/api/core";
+import { SignedIn, SignedOut, SignIn } from "@clerk/clerk-react";
+import EnsureConvexUser from "./components/EnsureConvexUser";
 
 export default function App() {
   const { send, disconnect, connect, setPrompt, restoreDefaultPrompt, changeLanguage } = useWebSocket();
@@ -61,15 +63,27 @@ export default function App() {
   };
 
   return (
-    <Overlay
-      onPause={() => send("pause")}
-      onResume={() => send("resume")}
-      onConnect={connect}
-      onDisconnect={disconnect}
-      onSavePrompt={setPrompt}
-      onRestorePrompt={restoreDefaultPrompt}
-      onChangeLanguage={changeLanguage}
-      onToggleScreenPanel={toggleScreenPanel}
-    />
+    <>
+      <SignedIn>
+        <EnsureConvexUser />
+        <Overlay
+          onPause={() => send("pause")}
+          onResume={() => send("resume")}
+          onConnect={connect}
+          onDisconnect={disconnect}
+          onSavePrompt={setPrompt}
+          onRestorePrompt={restoreDefaultPrompt}
+          onChangeLanguage={changeLanguage}
+          onToggleScreenPanel={toggleScreenPanel}
+        />
+      </SignedIn>
+      <SignedOut>
+        <div className="flex h-screen w-screen items-center justify-center bg-gray-900 text-white" data-tauri-drag-region>
+          <div className="rounded-xl bg-gray-800 p-8 shadow-xl">
+            <SignIn routing="virtual" />
+          </div>
+        </div>
+      </SignedOut>
+    </>
   );
 }
