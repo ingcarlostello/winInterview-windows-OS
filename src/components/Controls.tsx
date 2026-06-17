@@ -2,7 +2,7 @@ import { Mic, Pause, Play, Eye, EyeOff, Square, Lock } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useInterviewStore } from "../stores/interview";
 import { useTranslation } from "../hooks/useTranslation";
-import { useFeatureGate } from "../hooks/useFeatureGate";
+import { useFeatureGate, useQuotaInfo } from "../hooks/useFeatureGate";
 
 interface ControlsProps {
   onPause: () => void;
@@ -23,7 +23,14 @@ export default function Controls({
   const theme = useInterviewStore((s) => s.theme);
   const { t } = useTranslation();
   const { allowed: canUseInvisibleMode } = useFeatureGate("invisible_mode");
+  const { exceeded: transcriptionExceeded } = useQuotaInfo("transcription_seconds");
+  const liveTranscriptionRemaining = useInterviewStore((s) => s.liveTranscriptionRemaining);
+  const countdownActive = useInterviewStore((s) => s.countdownActive);
   const isPaused = status === "paused";
+
+  const effectiveExceeded = countdownActive && liveTranscriptionRemaining !== null
+    ? liveTranscriptionRemaining <= 0
+    : transcriptionExceeded;
 
   const handleToggleProtection = async () => {
     const newState = await invoke<boolean>("toggle_content_protected");
@@ -34,18 +41,30 @@ export default function Controls({
     <div className="flex items-center justify-between px-3 pb-2">
       <div className="flex items-center gap-2 mt-1 mb-1">
         {status === "idle" || status === "error" ? (
-          <button
-            type="button"
-            onClick={onConnect}
-            className={`flex items-center gap-1.5 mt-3 mb-1 px-3 py-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
-              theme === "glass"
-                ? "glass-button-active"
-                : "bg-accent-soft border border-accent-border text-accent hover:bg-accent/50"
-            }`}
-          >
-            <Mic size={13} />
-            {t("btnListen")}
-          </button>
+          effectiveExceeded ? (
+            <button
+              type="button"
+              disabled
+              title={t("quotaExhaustedTooltip")}
+              className="flex items-center gap-1.5 mt-3 mb-1 px-3 py-1.5 text-xs font-bold rounded-lg cursor-not-allowed border border-red-500/30 bg-red-500/15 text-red-400"
+            >
+              <Lock size={13} />
+              {t("quotaExhausted")}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onConnect}
+              className={`flex items-center gap-1.5 mt-3 mb-1 px-3 py-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
+                theme === "glass"
+                  ? "glass-button-active"
+                  : "bg-accent-soft border border-accent-border text-accent hover:bg-accent/50"
+              }`}
+            >
+              <Mic size={13} />
+              {t("btnListen")}
+            </button>
+          )
         ) : status === "connected" ? (
           <button
             type="button"

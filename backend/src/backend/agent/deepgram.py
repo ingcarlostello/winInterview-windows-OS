@@ -25,28 +25,50 @@ class DeepgramAgent:
         self._ctx: Any = None
         self._conn: Any = None
         self._ready_event = threading.Event()
+        self._is_closed = False
+        self._intentional_stop = False
+        self.on_closed: Callable[[], None] | None = None
+
+    @property
+    def is_closed(self) -> bool:
+        return self._is_closed
 
     def start(self, message_handler: Callable[[Any], None]) -> bool:
         try:
+            self._ready_event.clear()
+            self._is_closed = False
+            self._intentional_stop = False
             self._ctx = self._client.agent.v1.connect()
             self._conn = self._ctx.__enter__()
-            
+
             self._conn.on(EventType.OPEN, lambda _: None)
             self._conn.on(EventType.MESSAGE, message_handler)
-            self._conn.on(EventType.CLOSE, lambda _: None)
+            self._conn.on(EventType.CLOSE, self._on_close)
             self._conn.on(EventType.ERROR, lambda e: logger.error("Deepgram error: %s", e))
-            
+
             self._conn.send_settings(self._build_settings())
-            
+
             # start_listening() es bloqueante, debe ejecutarse en un hilo separado
             thread = threading.Thread(target=self._listening_loop, daemon=True)
             thread.start()
-            
+
             return True
         except Exception as e:
             logger.error("Failed to start Deepgram agent: %s", e, exc_info=True)
             self._cleanup()
             return False
+
+    def _on_close(self, _event: Any) -> None:
+        self._is_closed = True
+        if self._intentional_stop:
+            logger.info("Deepgram connection closed (intentional)")
+            return
+        logger.warning("Deepgram connection closed unexpectedly")
+        if self.on_closed:
+            try:
+                self.on_closed()
+            except Exception as e:
+                logger.warning("on_closed callback error: %s", e)
 
     def _listening_loop(self) -> None:
         try:
@@ -58,24 +80,21 @@ class DeepgramAgent:
         return self._ready_event.wait(timeout=timeout)
 
     def send_media(self, frame: bytes) -> None:
-        if self._conn:
-            try:
-                self._conn.send_media(frame)
-            except Exception as e:
-                logger.warning("Failed to send media frame: %s", e)
-
-    def keep_alive(self) -> None:
-        if self._conn:
-            try:
-                if hasattr(self._conn, "keep_alive"):
-                    self._conn.keep_alive()
-                elif hasattr(self._conn, "send_keep_alive"):
-                    self._conn.send_keep_alive()
-                self._conn.send_media(b'\x00' * 1600)
-            except Exception as e:
-                logger.warning("Keep-alive failed: %s", e)
+        if self._is_closed or not self._conn:
+            return
+        try:
+            self._conn.send_media(frame)
+        except Exception as e:
+            self._is_closed = True
+            logger.warning("Failed to send media frame: %s", e)
+            if not self._intentional_stop and self.on_closed:
+                try:
+                    self.on_closed()
+                except Exception as cb_err:
+                    logger.warning("on_closed callback error: %s", cb_err)
 
     def stop(self) -> None:
+        self._intentional_stop = True
         self._cleanup()
 
     def _cleanup(self) -> None:
@@ -86,6 +105,7 @@ class DeepgramAgent:
                 logger.warning("Error closing Deepgram context: %s", e)
         self._ctx = None
         self._conn = None
+        self._is_closed = True
 
     def _build_settings(self) -> AgentV1Settings:
         return AgentV1Settings(

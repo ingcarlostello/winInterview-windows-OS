@@ -1,6 +1,72 @@
-import { mutation, query, internalMutation } from "./_generated/server";
+import { mutation, query, internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
-import { PLAN_QUOTAS, type PlanId } from "./constants";
+import {
+  PLAN_QUOTAS,
+  PLAN_NAMES,
+  PLAN_FEATURES,
+  type PlanId,
+} from "./constants";
+
+function buildFeatureFlags(planId: PlanId): Record<string, boolean> {
+  const flags = {
+    custom_prompts: false,
+    simultaneous_captures: false,
+    simultaneous_analysis: false,
+    keyboard_shortcuts: false,
+    invisible_mode: false,
+    ghost_mode: false,
+  };
+  for (const feature of PLAN_FEATURES[planId] ?? []) {
+    flags[feature as keyof typeof flags] = true;
+  }
+  return flags;
+}
+
+export const getUserAndQuotaByClerkId = internalQuery({
+  args: {
+    clerkId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
+      .unique();
+
+    if (!user) {
+      return null;
+    }
+
+    const planId = (user.planId as PlanId) ?? "lite";
+    const month = new Date().toISOString().slice(0, 7);
+
+    const quota = await ctx.db
+      .query("quotas")
+      .withIndex("by_user_month", (q) =>
+        q.eq("userId", user._id).eq("month", month)
+      )
+      .unique();
+
+    const limits = PLAN_QUOTAS[planId] ?? PLAN_QUOTAS.lite;
+
+    return {
+      clerkId: user.clerkId,
+      planId,
+      planName: PLAN_NAMES[planId] ?? "Lite",
+      features: buildFeatureFlags(planId),
+      quota: {
+        transcriptionSecondsRemaining:
+          quota?.transcriptionSecondsRemaining ?? limits.transcriptionSeconds,
+        capturesRemaining: quota?.capturesRemaining ?? limits.captures,
+        analysesRemaining: quota?.analysesRemaining ?? limits.analyses,
+      },
+      limits: {
+        transcriptionSeconds: limits.transcriptionSeconds,
+        captures: limits.captures,
+        analyses: limits.analyses,
+      },
+    };
+  },
+});
 
 export const storeUser = mutation({
   args: {},
@@ -70,6 +136,69 @@ export const getCurrentUser = query({
         q.eq("tokenIdentifier", identity.tokenIdentifier)
       )
       .unique();
+  },
+});
+
+export const getCurrentUserPlanInfo = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return null;
+    }
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_token", (q) =>
+        q.eq("tokenIdentifier", identity.tokenIdentifier)
+      )
+      .unique();
+
+    if (!user) {
+      return null;
+    }
+
+    const planId = (user.planId as PlanId) ?? "lite";
+    const month = new Date().toISOString().slice(0, 7);
+
+    const quota = await ctx.db
+      .query("quotas")
+      .withIndex("by_user_month", (q) =>
+        q.eq("userId", user._id).eq("month", month)
+      )
+      .unique();
+
+    const limits = PLAN_QUOTAS[planId] ?? PLAN_QUOTAS.lite;
+
+    const transcriptionSecondsRemaining =
+      quota?.transcriptionSecondsRemaining ?? limits.transcriptionSeconds;
+    const capturesRemaining =
+      quota?.capturesRemaining ?? limits.captures;
+    const analysesRemaining =
+      quota?.analysesRemaining ?? limits.analyses;
+
+    return {
+      plan_id: planId,
+      plan_name: PLAN_NAMES[planId] ?? "Lite",
+      features: buildFeatureFlags(planId),
+      quotas: {
+        transcription_seconds: {
+          used: Math.max(0, limits.transcriptionSeconds - transcriptionSecondsRemaining),
+          limit: limits.transcriptionSeconds,
+          remaining: transcriptionSecondsRemaining,
+        },
+        screen_captures: {
+          used: Math.max(0, limits.captures - capturesRemaining),
+          limit: limits.captures,
+          remaining: capturesRemaining,
+        },
+        screen_analyses: {
+          used: Math.max(0, limits.analyses - analysesRemaining),
+          limit: limits.analyses,
+          remaining: analysesRemaining,
+        },
+      },
+    };
   },
 });
 

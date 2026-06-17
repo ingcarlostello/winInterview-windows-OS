@@ -4,6 +4,7 @@ import uuid
 from fastapi import Depends, WebSocket, WebSocketDisconnect
 from websockets.exceptions import ConnectionClosed
 
+from backend.convex_client import ConvexClient
 from backend.dependencies import get_connection_manager, get_llm_service, get_vision_service
 from backend.llm.protocol import LLMService
 from backend.llm.vision import VisionLLMService
@@ -26,7 +27,7 @@ async def websocket_endpoint(
     if not token:
         await websocket.close(code=1008, reason="Missing token")
         return
-        
+
     try:
         from backend.auth.clerk import verify_clerk_token
         payload = verify_clerk_token(token)
@@ -41,17 +42,30 @@ async def websocket_endpoint(
     session_id = str(uuid.uuid4())[:8]
     initial_language = websocket.query_params.get("lang", "es")
     custom_prompt = websocket.query_params.get("prompt")
-    
-    plan_id_str = websocket.query_params.get("plan", "lite")
-    try:
-        plan_id = PlanId(plan_id_str)
-    except ValueError:
-        plan_id = PlanId.LITE
 
-    # In a real app, you would fetch initial quotas from Convex here
-    # For now, we initialize PlanGate with the clerk_id to track in-memory and flush later.
-    plan_gate = PlanGate(plan_id=plan_id, clerk_id=clerk_id)
-    
+    convex_client = ConvexClient()
+    plan_id = PlanId.LITE
+    remaining = None
+    try:
+        result = await convex_client.get_user_and_quota(clerk_id)
+        if result:
+            plan_id, remaining = result
+            logger.info(f"Session {session_id} loaded plan {plan_id.value} from Convex")
+    except Exception as e:
+        logger.error(f"Failed to load plan from Convex for session {session_id}: {e}")
+        plan_id_str = websocket.query_params.get("plan", "lite")
+        try:
+            plan_id = PlanId(plan_id_str)
+        except ValueError:
+            plan_id = PlanId.LITE
+
+    plan_gate = PlanGate(
+        plan_id=plan_id,
+        remaining=remaining,
+        clerk_id=clerk_id,
+        convex_client=convex_client,
+    )
+
     session = AgentSession(
         session_id=session_id,
         websocket=websocket,

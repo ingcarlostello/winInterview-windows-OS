@@ -1,12 +1,6 @@
-import os
-import asyncio
 import logging
-import aiohttp
+from backend.convex_client import ConvexClient
 from backend.tiers import Feature, Quota, PlanId, has_feature, get_quota_limit, PLANS
-
-CONVEX_URL = os.environ.get("VITE_CONVEX_URL", "https://placeholder.convex.cloud")
-CONVEX_BACKEND_KEY = os.environ.get("CONVEX_BACKEND_KEY", "")
-CONVEX_SITE_URL = CONVEX_URL.replace(".cloud", ".site")
 
 logger = logging.getLogger(__name__)
 
@@ -28,15 +22,36 @@ class QuotaExceededError(Exception):
 
 
 class PlanGate:
-    def __init__(self, plan_id: PlanId, usage: dict[Quota, int] | None = None, clerk_id: str | None = None):
+    def __init__(
+        self,
+        plan_id: PlanId,
+        usage: dict[Quota, int] | None = None,
+        remaining: dict[Quota, int] | None = None,
+        clerk_id: str | None = None,
+        convex_client: ConvexClient | None = None,
+    ):
         self.plan_id = plan_id
         self.clerk_id = clerk_id
-        self._usage: dict[Quota, int] = usage or {q: 0 for q in Quota}
+        self._convex = convex_client or ConvexClient()
+
+        if usage is not None:
+            self._usage: dict[Quota, int] = {q: usage.get(q, 0) for q in Quota}
+        elif remaining is not None:
+            self._usage = {
+                q: max(
+                    0,
+                    get_quota_limit(plan_id, q) - remaining.get(q, get_quota_limit(plan_id, q)),
+                )
+                for q in Quota
+            }
+        else:
+            self._usage = {q: 0 for q in Quota}
+
         self._unflushed_usage: dict[Quota, int] = {q: 0 for q in Quota}
 
-    async def flush_to_convex(self):
-        if not self.clerk_id or not CONVEX_BACKEND_KEY:
-            logger.debug("Skipping Convex flush: no clerk_id or backend key")
+    async def flush_to_convex(self) -> None:
+        if not self.clerk_id:
+            logger.debug("Skipping Convex flush: no clerk_id")
             return
 
         quota_type_map = {
@@ -45,32 +60,17 @@ class PlanGate:
             Quota.SCREEN_ANALYSES: "analysis",
         }
 
-        url = f"{CONVEX_SITE_URL}/api/quotas/decrement"
-        headers = {
-            "Authorization": f"Bearer {CONVEX_BACKEND_KEY}",
-            "Content-Type": "application/json",
-        }
-
         for quota, amount in self._unflushed_usage.items():
-            if amount > 0:
-                q_type = quota_type_map.get(quota)
-                if not q_type:
-                    continue
-                try:
-                    async with aiohttp.ClientSession() as session:
-                        payload = {
-                            "clerkId": self.clerk_id,
-                            "quotaType": q_type,
-                            "amount": amount,
-                        }
-                        async with session.post(url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=5)) as resp:
-                            if resp.status == 200:
-                                self._unflushed_usage[quota] = 0
-                            else:
-                                body = await resp.text()
-                                logger.error(f"Failed to flush quota to Convex: {resp.status} {body}")
-                except Exception as e:
-                    logger.error(f"Failed to flush quota to Convex: {e}")
+            if amount <= 0:
+                continue
+            q_type = quota_type_map.get(quota)
+            if not q_type:
+                continue
+            success = await self._convex.decrement_quota(
+                self.clerk_id, q_type, amount
+            )
+            if success:
+                self._unflushed_usage[quota] = 0
 
     def require_feature(self, feature: Feature) -> None:
         if not has_feature(self.plan_id, feature):

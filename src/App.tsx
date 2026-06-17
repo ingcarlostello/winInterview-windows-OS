@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from "react";
+import { useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
 import Overlay from "./components/Overlay";
 import { useWebSocket } from "./hooks/useWebSocket";
@@ -6,32 +6,15 @@ import { useInterviewStore } from "./stores/interview";
 import { invoke } from "@tauri-apps/api/core";
 import { SignedIn, SignedOut, SignIn } from "@clerk/clerk-react";
 import EnsureConvexUser from "./components/EnsureConvexUser";
+import { usePlanSync } from "./hooks/usePlanSync";
+import { useScreenCapture } from "./hooks/useScreenCapture";
+import { useTranscriptionCountdown } from "./hooks/useTranscriptionCountdown";
 
 export default function App() {
   const { send, disconnect, connect, setPrompt, restoreDefaultPrompt, changeLanguage } = useWebSocket();
-
-  const captureScreen = useCallback(async () => {
-    const canCapture = useInterviewStore.getState().canCaptureScreen();
-    if (!canCapture) return;
-
-    useInterviewStore.getState().setIsCapturingScreen(true);
-
-    // Wait for the browser to actually paint the spinner
-    await new Promise<void>((resolve) => {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => resolve());
-      });
-    });
-
-    try {
-      const img = await invoke<string>("capture_screen");
-      useInterviewStore.getState().addScreenImage(img);
-    } catch (error) {
-      console.error("Error capturing screen:", error);
-    } finally {
-      useInterviewStore.getState().setIsCapturingScreen(false);
-    }
-  }, []);
+  usePlanSync();
+  const { captureScreen } = useScreenCapture();
+  useTranscriptionCountdown();
 
   useEffect(() => {
     const unlistenCapture = listen("capture-screen-shortcut", () => {

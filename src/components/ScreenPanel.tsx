@@ -3,12 +3,13 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
+import { useAuth } from "@clerk/clerk-react";
 import { useInterviewStore } from "../stores/interview";
 import { useTranslation } from "../hooks/useTranslation";
 import { useFeatureGate, useQuotaInfo } from "../hooks/useFeatureGate";
+import { useScreenCapture } from "../hooks/useScreenCapture";
 import { WS_MESSAGE_TYPE, WS_STATUS } from "../constants/ws";
 import { useCallback, useRef } from "react";
-import { invoke } from "@tauri-apps/api/core";
 
 const MAX_CAPTURES_ULTRA = 4;
 const MAX_CAPTURES_LITE = 1;
@@ -20,21 +21,24 @@ export default function ScreenPanel() {
   const isCapturingScreen = useInterviewStore((s) => s.isCapturingScreen);
   const isAnalyzingScreen = useInterviewStore((s) => s.isAnalyzingScreen);
   const screenPrompt = useInterviewStore((s) => s.screenPrompt);
-  const addScreenImage = useInterviewStore((s) => s.addScreenImage);
   const clearScreen = useInterviewStore((s) => s.clearScreen);
   const clearScreenChunks = useInterviewStore((s) => s.clearScreenChunks);
   const addScreenChunk = useInterviewStore((s) => s.addScreenChunk);
-  const setIsCapturingScreen = useInterviewStore((s) => s.setIsCapturingScreen);
   const setIsAnalyzingScreen = useInterviewStore((s) => s.setIsAnalyzingScreen);
   const setScreenPrompt = useInterviewStore((s) => s.setScreenPrompt);
   const canCaptureScreen = useInterviewStore((s) => s.canCaptureScreen);
   const screenPanelOpen = useInterviewStore((s) => s.screenPanelOpen);
+  const mergePlanInfo = useInterviewStore((s) => s.mergePlanInfo);
+  const updateQuota = useInterviewStore((s) => s.updateQuota);
 
   const wsRef = useRef<WebSocket | null>(null);
   const { t } = useTranslation();
+  const { getToken } = useAuth();
   const { allowed: canUseSimultaneousCaptures } = useFeatureGate("simultaneous_captures");
   const { allowed: canUseCustomPrompts } = useFeatureGate("custom_prompts");
   const { remaining: capturesRemaining, exceeded: capturesExceeded } = useQuotaInfo("screen_captures");
+  const { remaining: analysesRemaining, exceeded: analysesExceeded } = useQuotaInfo("screen_analyses");
+  const { captureScreen } = useScreenCapture();
 
   const MAX_CAPTURES = canUseSimultaneousCaptures ? MAX_CAPTURES_ULTRA : MAX_CAPTURES_LITE;
 
@@ -43,48 +47,33 @@ export default function ScreenPanel() {
   const canCapture = canCaptureScreen() && !capturesExceeded && screenImages.length < MAX_CAPTURES;
   const responseText = screenChunks.join("");
 
-  const handleCapture = useCallback(async () => {
-    if (!canCapture) return;
-
-    setIsCapturingScreen(true);
-
-    // Wait for the browser to actually paint the spinner before
-    // invoking the Tauri command (which may still briefly block IPC)
-    await new Promise<void>((resolve) => {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => resolve());
-      });
-    });
-
-    try {
-      const img = await invoke<string>("capture_screen");
-      addScreenImage(img);
-    } catch (error) {
-      console.error("Error capturing screen:", error);
-    } finally {
-      setIsCapturingScreen(false);
-    }
-  }, [canCapture, addScreenImage, setIsCapturingScreen]);
-
-  const handleAnalyze = useCallback(() => {
-    if (screenImages.length === 0 || isAnalyzingScreen) return;
+  const handleAnalyze = useCallback(async () => {
+    if (screenImages.length === 0 || isAnalyzingScreen || analysesExceeded) return;
 
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.close();
     }
 
+    const token = await getToken();
+    if (!token) {
+      console.error("Cannot start analysis: missing auth token");
+      return;
+    }
+
     setIsAnalyzingScreen(true);
     clearScreenChunks();
 
+    const effectivePrompt = (canUseCustomPrompts ? screenPrompt : "").trim() || t("promptPlaceholder");
+
     const planId = useInterviewStore.getState().planInfo?.plan_id ?? "lite";
-    const ws = new WebSocket(`${WS_ANALYZE_URL}?plan=${planId}`);
+    const ws = new WebSocket(`${WS_ANALYZE_URL}?plan=${planId}&token=${token}`);
     wsRef.current = ws;
 
     ws.onopen = () => {
       ws.send(
         JSON.stringify({
           images: screenImages,
-          prompt: screenPrompt,
+          prompt: effectivePrompt,
         })
       );
     };
@@ -97,6 +86,15 @@ export default function ScreenPanel() {
         } else if (data.type === WS_MESSAGE_TYPE.STATUS && data.status === WS_STATUS.COMPLETED) {
           setIsAnalyzingScreen(false);
           ws.close();
+        } else if (data.type === WS_MESSAGE_TYPE.PLAN_INFO) {
+          mergePlanInfo({
+            plan_id: data.plan_id,
+            plan_name: data.plan_name,
+            features: data.features,
+            quotas: data.quotas,
+          });
+        } else if (data.type === WS_MESSAGE_TYPE.QUOTA_UPDATE) {
+          updateQuota(data.quota, data.info);
         } else if (data.type === WS_MESSAGE_TYPE.ERROR) {
           console.error("Analysis error:", data.message);
           setIsAnalyzingScreen(false);
@@ -120,9 +118,15 @@ export default function ScreenPanel() {
     screenImages,
     screenPrompt,
     isAnalyzingScreen,
+    analysesExceeded,
     clearScreenChunks,
     addScreenChunk,
     setIsAnalyzingScreen,
+    getToken,
+    canUseCustomPrompts,
+    mergePlanInfo,
+    updateQuota,
+    t,
   ]);
 
   const handleClear = useCallback(() => {
@@ -195,7 +199,7 @@ export default function ScreenPanel() {
                 {t("screenCaptureDescription")}
               </p>
               <button
-                onClick={handleCapture}
+                onClick={captureScreen}
                 disabled={!canCapture || isCapturingScreen}
                 className="mt-1 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-accent text-black text-xs font-semibold hover:brightness-110 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -215,7 +219,7 @@ export default function ScreenPanel() {
                 <span className="text-accent/60 text-[10px]">
                   {capturesExceeded
                     ? t("quotaExceeded")
-                    : t("captureLimitReached")}
+                    : t("captureLimitReached", { count: MAX_CAPTURES })}
                 </span>
               )}
               {canCapture && capturesRemaining > 0 && (
@@ -251,10 +255,17 @@ export default function ScreenPanel() {
                   disabled={!canUseCustomPrompts}
                   className="w-full min-h-[80px] bg-black/20 px-3 py-2 text-white text-xs resize-y focus:outline-none focus:bg-black/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 />
-                <div className="border-t border-white/10 px-3 py-2 flex justify-end">
+                <div className="border-t border-white/10 px-3 py-2 flex items-center justify-between">
+                  <span className="text-white/40 text-[10px]">
+                    {analysesExceeded
+                      ? t("analysesQuotaExceeded")
+                      : analysesRemaining > 0
+                        ? `${analysesRemaining} ${t("analysesRemaining")}`
+                        : ""}
+                  </span>
                   <button
                     onClick={handleAnalyze}
-                    disabled={isAnalyzingScreen || !canUseCustomPrompts}
+                    disabled={isAnalyzingScreen || screenImages.length === 0 || analysesExceeded}
                     className="flex items-center gap-2 px-4 py-1.5 rounded-lg bg-accent/20 border border-accent-border text-accent text-xs font-medium hover:bg-accent/30 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isAnalyzingScreen ? (
@@ -333,7 +344,7 @@ export default function ScreenPanel() {
           <div className="border-b border-white/10 mx-3" />
           <div className="px-3 py-2.5 shrink-0">
             <button
-              onClick={handleCapture}
+              onClick={captureScreen}
               disabled={!canCapture || isCapturingScreen}
               className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-accent-soft border border-accent-border text-accent text-xs font-medium hover:bg-accent/25 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >

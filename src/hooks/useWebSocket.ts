@@ -30,8 +30,11 @@ export function useWebSocket() {
   const setError = useInterviewStore((s) => s.setError);
   const reset = useInterviewStore((s) => s.reset);
   const incrementQuestionsAnswered = useInterviewStore((s) => s.incrementQuestionsAnswered);
-  const setPlanInfo = useInterviewStore((s) => s.setPlanInfo);
-  const updateQuota = useInterviewStore((s) => s.updateQuota);
+  const mergePlanInfo = useInterviewStore((s) => s.mergePlanInfo);
+  const updateQuotas = useInterviewStore((s) => s.updateQuotas);
+  const setLiveTranscriptionRemaining = useInterviewStore((s) => s.setLiveTranscriptionRemaining);
+  const setCountdownActive = useInterviewStore((s) => s.setCountdownActive);
+  const setSessionStartTime = useInterviewStore((s) => s.setSessionStartTime);
 
   const disconnect = useCallback(() => {
     intentionalCloseRef.current = true;
@@ -43,8 +46,9 @@ export function useWebSocket() {
       wsRef.current.close(1000, "user_disconnect");
     }
     wsRef.current = null;
+    setSessionStartTime(null);
     reset();
-  }, [reset]);
+  }, [reset, setSessionStartTime]);
 
   const connect = useCallback(async () => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
@@ -72,6 +76,7 @@ export function useWebSocket() {
 
     ws.onopen = () => {
       setStatus("connected");
+      setSessionStartTime(Date.now());
     };
 
     ws.onmessage = (event) => {
@@ -94,6 +99,23 @@ export function useWebSocket() {
             if (rawStatus === WS_STATUS.QUOTA_EXCEEDED) {
               setError("Transcription quota exceeded. Upgrade your plan to continue.");
               setStatus("paused");
+              setSessionStartTime(null);
+              
+              const currentPlanInfo = useInterviewStore.getState().planInfo;
+              if (currentPlanInfo) {
+                const updatedQuotas = {
+                  ...currentPlanInfo.quotas,
+                  transcription_seconds: {
+                    ...currentPlanInfo.quotas.transcription_seconds,
+                    remaining: 0,
+                    used: currentPlanInfo.quotas.transcription_seconds.limit,
+                  },
+                };
+                useInterviewStore.getState().setPlanInfo({
+                  ...currentPlanInfo,
+                  quotas: updatedQuotas,
+                });
+              }
               break;
             }
 
@@ -135,7 +157,7 @@ export function useWebSocket() {
             break;
           case WS_MESSAGE_TYPE.PLAN_INFO: {
             const planInfo = msg.data as unknown as PlanInfo;
-            setPlanInfo(planInfo);
+            mergePlanInfo(planInfo);
             invoke("update_plan_permissions", {
               shortcutsEnabled: planInfo.features.keyboard_shortcuts,
               invisibleModeEnabled: planInfo.features.invisible_mode,
@@ -156,8 +178,15 @@ export function useWebSocket() {
             break;
           }
           case WS_MESSAGE_TYPE.QUOTA_UPDATE: {
-            const { quota, info } = msg.data as unknown as { quota: string; info: { used: number; limit: number; remaining: number } };
-            updateQuota(quota, info);
+            const data = msg.data as Record<string, unknown>;
+            if (data.quotas) {
+              updateQuotas(data.quotas as Record<string, { used: number; limit: number; remaining: number }>);
+              const tsQuota = (data.quotas as Record<string, { remaining: number }>).transcription_seconds;
+              if (tsQuota) {
+                setLiveTranscriptionRemaining(tsQuota.remaining);
+              }
+            }
+            setCountdownActive(Boolean(data.speech_active));
             break;
           }
         }
@@ -168,6 +197,7 @@ export function useWebSocket() {
 
     ws.onclose = () => {
       setStatus("idle");
+      setSessionStartTime(null);
       if (mountedRef.current && !intentionalCloseRef.current) {
         reconnectTimerRef.current = setTimeout(() => {
           if (wsRef.current?.readyState !== WebSocket.OPEN) {
@@ -183,7 +213,7 @@ export function useWebSocket() {
     } catch (e) {
       console.error("[WS] Failed to get Clerk token or connect:", e);
     }
-  }, [setStatus, setTranscription, addResponseChunk, clearResponse, clearAll, setError, incrementQuestionsAnswered, setPlanInfo, updateQuota, getToken, isLoaded, isSignedIn]);
+  }, [setStatus, setTranscription, addResponseChunk, clearResponse, clearAll, setError, incrementQuestionsAnswered, mergePlanInfo, updateQuotas, setLiveTranscriptionRemaining, setCountdownActive, setSessionStartTime, getToken, isLoaded, isSignedIn]);
 
   useEffect(() => {
     connectRef.current = connect;
