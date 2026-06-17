@@ -249,7 +249,103 @@ Defined in `src-tauri/src/lib.rs`.
 - Window `alwaysOnTop` state is managed via `window.is_always_on_top()` (default true)
 - Commands: `toggle_always_on_top`, `toggle_content_protected`, `set_window_expanded`, `get_stealth_state`, `update_plan_permissions`
 
+## Authentication (Clerk + Convex)
+
+The app uses **Clerk** for identity management and **Convex** for user data persistence.
+
+### Architecture
+
+- **Clerk** handles user registration, login, and JWT issuance
+- **Convex** stores user profiles, quotas, and prompts (schema in `convex/schema.ts`)
+- **Dual sync paths** ensure users exist in Convex:
+  - **Client-side** (`EnsureConvexUser.tsx`): Runs when user signs in via the Tauri app, calls `storeUser()` mutation
+  - **Server-side webhook** (`convex/webhooks.ts`): Clerk sends `user.created`/`user.updated`/`user.deleted` events to Convex
+
+### Clerk Configuration
+
+**Dashboard setup required:**
+
+1. **JWT Template**: Create a template named `convex` with claims `{"aud": "convex"}` (required for `ctx.auth.getUserIdentity()` to work)
+2. **Webhook**: Add endpoint `https://<deployment>.convex.site/api/webhooks/clerk` with events:
+   - `user.created`
+   - `user.updated`
+   - `user.deleted`
+
+**Environment variables:**
+
+- **Frontend** (`.env`):
+  - `VITE_CLERK_PUBLISHABLE_KEY` — Clerk publishable key (pk_test_...)
+- **Convex** (set via `npx convex env set`):
+  - `CLERK_WEBHOOK_SIGNING_SECRET` — Webhook signing secret (whsec_...)
+  - `CONVEX_BACKEND_KEY` — Backend-to-Convex authentication key
+
+### User Sync Flow
+
+```
+Clerk (Identity Provider)
+    ↓
+    ├─→ Browser (JWT) → React App → EnsureConvexUser → storeUser() mutation
+    │
+    └─→ Webhook Event → POST /api/webhooks/clerk → createUserFromClerk() mutation
+```
+
+Both paths are **idempotent** — whichever runs first creates the user, the second finds the existing record.
+
+### Convex Schema
+
+**`users` table** (`convex/schema.ts`):
+- `clerkId` — Clerk user ID (subject claim)
+- `email`, `name`, `imageUrl` — User profile (optional)
+- `planId` — Subscription tier: `"lite"`, `"pro"`, or `"ultra"`
+- `tokenIdentifier` — Format: `https://<clerk-domain>|<clerkId>`
+- Indexes: `by_token` (tokenIdentifier), `by_clerk_id` (clerkId)
+
+**Related tables:**
+- `quotas` — Monthly quota tracking per user (indexed by `userId` + `month`)
+- `prompts` — Custom prompts per user per language (indexed by `userId` + `lang`)
+
+### Key Files
+
+| File | Purpose |
+|---|---|
+| `convex/auth.config.ts` | Clerk JWT issuer configuration for Convex auth |
+| `convex/users.ts` | User CRUD: `storeUser`, `getCurrentUser`, `updateUserPlan`, `createUserFromClerk`, `updateUserFromClerk`, `deleteUserByClerkId` |
+| `convex/webhooks.ts` | Clerk webhook handler (verifies Svix signature) + backend quota decrement |
+| `convex/http.ts` | HTTP router for webhook and quota endpoints |
+| `src/components/EnsureConvexUser.tsx` | Client-side user sync (5 retries with 1.5s delay) |
+| `src/providers/AuthProvider.tsx` | React providers: `ClerkProvider` + `ConvexProviderWithClerk` |
+
+### Webhook Signature Verification
+
+The webhook handler (`convex/webhooks.ts`) verifies Clerk's Svix signatures:
+- Reads `svix-id`, `svix-timestamp`, `svix-signature` headers
+- Decodes `CLERK_WEBHOOK_SIGNING_SECRET` (strips `whsec_` prefix if present)
+- Verifies HMAC-SHA256 signature using Web Crypto API
+- If secret not set, logs warning and skips verification (dev mode)
+
+### Backend Integration
+
+The Python backend (`backend/src/backend/auth/clerk.py`) independently verifies Clerk JWTs:
+- Uses `PyJWKClient` pointed at Clerk's JWKS endpoint
+- `verify_clerk_token()` decodes RS256 JWTs, extracts `clerk_id`
+- Used in WebSocket handler to initialize `PlanGate` for in-memory quota tracking
+- Backend can call `POST /api/quotas/decrement` on Convex (authenticated via `CONVEX_BACKEND_KEY`)
+
 ## Other files
 
 - `sugerencias.txt` — Clean Code/SOLID improvement suggestions (Spanish), covers SRP violations, command handler refactoring, conversation history management, type safety, magic strings
 - `.vscode/settings.json` — Python interpreter path (Poetry virtualenv), extraPaths for backend analysis
+
+<!-- convex-ai-start -->
+
+This project uses [Convex](https://convex.dev) as its backend.
+
+When working on Convex code, **always read
+`convex/_generated/ai/guidelines.md` first** for important guidelines on
+how to correctly use Convex APIs and patterns. The file contains rules that
+override what you may have learned about Convex from training data.
+
+Convex agent skills for common tasks can be installed by running
+`npx convex ai-files install`.
+
+<!-- convex-ai-end -->

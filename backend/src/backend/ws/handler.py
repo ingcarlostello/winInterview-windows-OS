@@ -22,6 +22,22 @@ async def websocket_endpoint(
     vision_service: VisionLLMService = Depends(get_vision_service),
     manager: ConnectionManager = Depends(get_connection_manager),
 ) -> None:
+    token = websocket.query_params.get("token")
+    if not token:
+        await websocket.close(code=1008, reason="Missing token")
+        return
+        
+    try:
+        from backend.auth.clerk import verify_clerk_token
+        payload = verify_clerk_token(token)
+        clerk_id = payload.get("sub")
+        if not clerk_id:
+            raise ValueError("Token missing subject")
+    except Exception as e:
+        logger.error(f"Token validation failed: {e}")
+        await websocket.close(code=1008, reason="Invalid token")
+        return
+
     session_id = str(uuid.uuid4())[:8]
     initial_language = websocket.query_params.get("lang", "es")
     custom_prompt = websocket.query_params.get("prompt")
@@ -31,7 +47,10 @@ async def websocket_endpoint(
         plan_id = PlanId(plan_id_str)
     except ValueError:
         plan_id = PlanId.LITE
-    plan_gate = PlanGate(plan_id=plan_id)
+
+    # In a real app, you would fetch initial quotas from Convex here
+    # For now, we initialize PlanGate with the clerk_id to track in-memory and flush later.
+    plan_gate = PlanGate(plan_id=plan_id, clerk_id=clerk_id)
     
     session = AgentSession(
         session_id=session_id,

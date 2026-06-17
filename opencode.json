@@ -1,0 +1,15 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "convex": {
+      "type": "local",
+      "command": ["npx", "-y", "convex@latest", "mcp", "start", "--project-dir", "/Users/carlos/Desktop/interview_responder"],
+      "enabled": true
+    },
+    "clerk": {
+      "type": "remote",
+      "url": "https://mcp.clerk.com/mcp",
+      "enabled": true
+    }
+  }
+}

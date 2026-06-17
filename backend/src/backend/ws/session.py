@@ -71,6 +71,11 @@ class DialogCoordinator:
                 
         if self.on_state_change:
             await self.on_state_change(WsStatus.LISTENING)
+            
+        try:
+            await self.plan_gate.flush_to_convex()
+        except Exception as e:
+            logger.error(f"Failed to flush to Convex after response: {e}")
 
 
 class AgentSession:
@@ -168,6 +173,10 @@ class AgentSession:
 
     async def stop(self) -> None:
         await self.audio.stop()
+        try:
+            await self.plan_gate.flush_to_convex()
+        except Exception as e:
+            logger.error(f"Failed to flush to Convex on stop: {e}")
         self.manager.disconnect(self.session_id)
 
     async def handle_command(self, cmd: ParsedCommand) -> None:
