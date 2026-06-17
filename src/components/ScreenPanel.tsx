@@ -1,15 +1,17 @@
-import { Monitor, Sparkles, RefreshCw, Camera } from "lucide-react";
+import { Monitor, Sparkles, RefreshCw, Camera, Lock } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { useInterviewStore } from "../stores/interview";
 import { useTranslation } from "../hooks/useTranslation";
+import { useFeatureGate, useQuotaInfo } from "../hooks/useFeatureGate";
 import { WS_MESSAGE_TYPE, WS_STATUS } from "../constants/ws";
 import { useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
-const MAX_CAPTURES = 4;
+const MAX_CAPTURES_ULTRA = 4;
+const MAX_CAPTURES_LITE = 1;
 const WS_ANALYZE_URL = "ws://localhost:8000/api/ws/analyze-screens";
 
 export default function ScreenPanel() {
@@ -30,10 +32,15 @@ export default function ScreenPanel() {
 
   const wsRef = useRef<WebSocket | null>(null);
   const { t } = useTranslation();
+  const { allowed: canUseSimultaneousCaptures } = useFeatureGate("simultaneous_captures");
+  const { allowed: canUseCustomPrompts } = useFeatureGate("custom_prompts");
+  const { remaining: capturesRemaining, exceeded: capturesExceeded } = useQuotaInfo("screen_captures");
+
+  const MAX_CAPTURES = canUseSimultaneousCaptures ? MAX_CAPTURES_ULTRA : MAX_CAPTURES_LITE;
 
   const hasCaptures = screenImages.length > 0;
   const hasAnalysis = screenChunks.length > 0;
-  const canCapture = canCaptureScreen();
+  const canCapture = canCaptureScreen() && !capturesExceeded && screenImages.length < MAX_CAPTURES;
   const responseText = screenChunks.join("");
 
   const handleCapture = useCallback(async () => {
@@ -69,7 +76,8 @@ export default function ScreenPanel() {
     setIsAnalyzingScreen(true);
     clearScreenChunks();
 
-    const ws = new WebSocket(WS_ANALYZE_URL);
+    const planId = useInterviewStore.getState().planInfo?.plan_id ?? "lite";
+    const ws = new WebSocket(`${WS_ANALYZE_URL}?plan=${planId}`);
     wsRef.current = ws;
 
     ws.onopen = () => {
@@ -205,7 +213,14 @@ export default function ScreenPanel() {
               </button>
               {!canCapture && (
                 <span className="text-accent/60 text-[10px]">
-                  {t("captureLimitReached")}
+                  {capturesExceeded
+                    ? t("quotaExceeded")
+                    : t("captureLimitReached")}
+                </span>
+              )}
+              {canCapture && capturesRemaining > 0 && (
+                <span className="text-white/40 text-[10px]">
+                  {capturesRemaining} {t("capturesRemaining")}
                 </span>
               )}
             </div>
@@ -221,18 +236,25 @@ export default function ScreenPanel() {
                 <span className="text-accent text-[10px] font-semibold uppercase tracking-wider">
                   {t("promptForLLM")}
                 </span>
+                {!canUseCustomPrompts && (
+                  <span className="flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-medium rounded-full bg-accent-soft text-accent">
+                    <Lock size={8} />
+                    Pro
+                  </span>
+                )}
               </div>
               <div className="border border-white/10 rounded-xl overflow-hidden">
                 <textarea
                   value={screenPrompt}
                   onChange={(e) => setScreenPrompt(e.target.value)}
                   placeholder={t("promptPlaceholder")}
-                  className="w-full min-h-[80px] bg-black/20 px-3 py-2 text-white text-xs resize-y focus:outline-none focus:bg-black/30 transition-colors"
+                  disabled={!canUseCustomPrompts}
+                  className="w-full min-h-[80px] bg-black/20 px-3 py-2 text-white text-xs resize-y focus:outline-none focus:bg-black/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 />
                 <div className="border-t border-white/10 px-3 py-2 flex justify-end">
                   <button
                     onClick={handleAnalyze}
-                    disabled={isAnalyzingScreen}
+                    disabled={isAnalyzingScreen || !canUseCustomPrompts}
                     className="flex items-center gap-2 px-4 py-1.5 rounded-lg bg-accent/20 border border-accent-border text-accent text-xs font-medium hover:bg-accent/30 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isAnalyzingScreen ? (

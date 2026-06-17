@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from "react";
-import { Sliders, Check, RotateCcw, ChevronDown } from "lucide-react";
+import { Sliders, Check, RotateCcw, ChevronDown, Lock } from "lucide-react";
 import { useInterviewStore } from "../stores/interview";
 import { useTranslation } from "../hooks/useTranslation";
+import { useFeatureGate } from "../hooks/useFeatureGate";
 
 interface PromptEditorProps {
   onSave: (prompt: string) => void;
@@ -16,6 +17,7 @@ export default function PromptEditor({ onSave, onRestore, onConnect }: PromptEdi
   const showPromptEditor = useInterviewStore((s) => s.showPromptEditor);
   const togglePromptEditor = useInterviewStore((s) => s.togglePromptEditor);
   const theme = useInterviewStore((s) => s.theme);
+  const { allowed: canUseCustomPrompts } = useFeatureGate("custom_prompts");
 
   const [draft, setDraft] = useState(() => customPrompts[language] || "");
   const [saved, setSaved] = useState(false);
@@ -45,6 +47,28 @@ export default function PromptEditor({ onSave, onRestore, onConnect }: PromptEdi
     setRestored(true);
     setTimeout(() => setRestored(false), 2000);
   };
+
+  if (!canUseCustomPrompts) {
+    return (
+      <div className="px-3 mb-6 mt-2">
+        <div className={`flex items-center justify-between px-3 py-2 rounded-xl mt-4 opacity-60 ${
+          theme === "glass"
+            ? "glass-button-active"
+            : "bg-white/5 border border-white/10"
+        }`}>
+          <div className="flex items-center gap-2">
+            <Lock size={14} className="text-white/40" />
+            <span className="text-xs font-medium text-white/60 uppercase tracking-wider">
+              {t("btnTogglePrompt")}
+            </span>
+            <span className="px-1.5 py-0.5 text-[9px] font-medium rounded-full bg-accent-soft text-accent">
+              Pro
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="px-3 mb-6 mt-2">

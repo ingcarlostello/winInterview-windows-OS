@@ -5,6 +5,8 @@ export const WS_MESSAGE_TYPE = {
   ERROR: "error",
   SCREEN_CHUNK: "screen_chunk",
   SCREEN_IMAGE: "screen_image",
+  PLAN_INFO: "plan_info",
+  QUOTA_UPDATE: "quota_update",
 } as const;
 
 export const WS_STATUS = {
@@ -20,6 +22,8 @@ export const WS_STATUS = {
   COMPLETED: "completed",
   PROMPT_SAVED: "prompt_saved",
   PROMPT_CLEARED: "prompt_cleared",
+  QUOTA_EXCEEDED: "quota_exceeded",
+  FEATURE_BLOCKED: "feature_blocked",
 } as const;
 
 export type WsMessageType = (typeof WS_MESSAGE_TYPE)[keyof typeof WS_MESSAGE_TYPE];

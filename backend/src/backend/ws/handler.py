@@ -7,6 +7,8 @@ from websockets.exceptions import ConnectionClosed
 from backend.dependencies import get_connection_manager, get_llm_service, get_vision_service
 from backend.llm.protocol import LLMService
 from backend.llm.vision import VisionLLMService
+from backend.plan_gate import PlanGate
+from backend.tiers import PlanId
 from backend.ws.command_parser import create_default_parser
 from backend.ws.session import AgentSession
 from backend.ws_manager import ConnectionManager
@@ -24,12 +26,20 @@ async def websocket_endpoint(
     initial_language = websocket.query_params.get("lang", "es")
     custom_prompt = websocket.query_params.get("prompt")
     
+    plan_id_str = websocket.query_params.get("plan", "lite")
+    try:
+        plan_id = PlanId(plan_id_str)
+    except ValueError:
+        plan_id = PlanId.LITE
+    plan_gate = PlanGate(plan_id=plan_id)
+    
     session = AgentSession(
         session_id=session_id,
         websocket=websocket,
         llm_service=llm_service,
         manager=manager,
         vision_service=vision_service,
+        plan_gate=plan_gate,
         initial_language=initial_language,
         custom_prompt=custom_prompt,
     )

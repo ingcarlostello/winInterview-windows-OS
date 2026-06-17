@@ -61,7 +61,9 @@ export type TranslationKey =
   | "badgeReady"
   | "badgeListening"
   | "badgeThinking"
-  | "badgeResponding";
+  | "badgeResponding"
+  | "quotaExceeded"
+  | "capturesRemaining";
 
 const translations: Record<Language, Record<TranslationKey, string>> = {
   es: {
@@ -128,6 +130,8 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     badgeListening: "ESCUCHANDO",
     badgeThinking: "PENSANDO",
     badgeResponding: "RESPONDIENDO",
+    quotaExceeded: "Cuota agotada. Mejora tu plan.",
+    capturesRemaining: "capturas restantes este mes",
   },
   en: {
     statusDisconnected: "Disconnected",
@@ -193,6 +197,8 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     badgeListening: "LISTENING",
     badgeThinking: "THINKING",
     badgeResponding: "RESPONDING",
+    quotaExceeded: "Quota exceeded. Upgrade your plan.",
+    capturesRemaining: "captures remaining this month",
   },
 };
 

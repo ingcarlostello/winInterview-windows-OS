@@ -10,6 +10,9 @@ use xcap::Monitor;
 /// Thread-safe flags shared between shortcut handlers and commands.
 static GHOST_MODE: AtomicBool = AtomicBool::new(false);
 static CONTENT_PROTECTED: AtomicBool = AtomicBool::new(true);
+static SHORTCUTS_ENABLED: AtomicBool = AtomicBool::new(false);
+static INVISIBLE_MODE_ENABLED: AtomicBool = AtomicBool::new(false);
+static GHOST_MODE_ENABLED: AtomicBool = AtomicBool::new(false);
 
 // ── Tauri commands ──────────────────────────────────────────────────────────
 
@@ -94,6 +97,17 @@ fn get_stealth_state() -> serde_json::Value {
     })
 }
 
+#[tauri::command]
+fn update_plan_permissions(
+    shortcuts_enabled: bool,
+    invisible_mode_enabled: bool,
+    ghost_mode_enabled: bool,
+) {
+    SHORTCUTS_ENABLED.store(shortcuts_enabled, Ordering::SeqCst);
+    INVISIBLE_MODE_ENABLED.store(invisible_mode_enabled, Ordering::SeqCst);
+    GHOST_MODE_ENABLED.store(ghost_mode_enabled, Ordering::SeqCst);
+}
+
 // ── App entry ───────────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -131,6 +145,9 @@ pub fn run() {
             let handle2 = app.handle().clone();
             app.global_shortcut().on_shortcut("Ctrl+Shift+G", move |_app, _shortcut, event| {
                 if event.state() == ShortcutState::Pressed {
+                    if !GHOST_MODE_ENABLED.load(Ordering::SeqCst) {
+                        return;
+                    }
                     if let Some(window) = handle2.get_webview_window("main") {
                         let new_state = !GHOST_MODE.load(Ordering::SeqCst);
                         GHOST_MODE.store(new_state, Ordering::SeqCst);
@@ -144,6 +161,9 @@ pub fn run() {
             let handle3 = app.handle().clone();
             app.global_shortcut().on_shortcut("Ctrl+Shift+C", move |_app, _shortcut, event| {
                 if event.state() == ShortcutState::Pressed {
+                    if !SHORTCUTS_ENABLED.load(Ordering::SeqCst) {
+                        return;
+                    }
                     if let Some(window) = handle3.get_webview_window("main") {
                         let _ = window.emit("capture-screen-shortcut", ());
                     }
@@ -154,6 +174,9 @@ pub fn run() {
             let handle4 = app.handle().clone();
             app.global_shortcut().on_shortcut("Ctrl+Shift+P", move |_app, _shortcut, event| {
                 if event.state() == ShortcutState::Pressed {
+                    if !SHORTCUTS_ENABLED.load(Ordering::SeqCst) {
+                        return;
+                    }
                     if let Some(window) = handle4.get_webview_window("main") {
                         let _ = window.emit("pause-resume-shortcut", ());
                     }
@@ -164,6 +187,9 @@ pub fn run() {
             let handle5 = app.handle().clone();
             app.global_shortcut().on_shortcut("Ctrl+Shift+B", move |_app, _shortcut, event| {
                 if event.state() == ShortcutState::Pressed {
+                    if !INVISIBLE_MODE_ENABLED.load(Ordering::SeqCst) {
+                        return;
+                    }
                     if let Some(window) = handle5.get_webview_window("main") {
                         let new_state = !CONTENT_PROTECTED.load(Ordering::SeqCst);
                         CONTENT_PROTECTED.store(new_state, Ordering::SeqCst);
@@ -181,6 +207,7 @@ pub fn run() {
             toggle_content_protected,
             set_window_expanded,
             get_stealth_state,
+            update_plan_permissions,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

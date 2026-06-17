@@ -6,6 +6,8 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
 from backend.dependencies import get_vision_service
+from backend.plan_gate import FeatureBlockedError, PlanGate, QuotaExceededError
+from backend.tiers import Feature, PlanId, Quota
 from backend.ws.message_types import WsMessageType
 
 logger = logging.getLogger(__name__)
@@ -24,6 +26,13 @@ async def analyze_screens_ws(websocket: WebSocket):
     await websocket.accept()
     session_id = str(uuid.uuid4())
 
+    plan_id_str = websocket.query_params.get("plan", "lite")
+    try:
+        plan_id = PlanId(plan_id_str)
+    except ValueError:
+        plan_id = PlanId.LITE
+    plan_gate = PlanGate(plan_id=plan_id)
+
     try:
         data = await websocket.receive_json()
         images = data.get("images", [])
@@ -33,6 +42,25 @@ async def analyze_screens_ws(websocket: WebSocket):
             await websocket.send_json({
                 "type": WsMessageType.ERROR,
                 "message": "No images provided"
+            })
+            return
+
+        if len(images) > 1:
+            try:
+                plan_gate.require_feature(Feature.SIMULTANEOUS_ANALYSIS)
+            except FeatureBlockedError:
+                await websocket.send_json({
+                    "type": WsMessageType.ERROR,
+                    "message": "Simultaneous analysis not available in your plan. Upgrade to Pro."
+                })
+                return
+
+        try:
+            plan_gate.consume_quota(Quota.SCREEN_ANALYSES, len(images))
+        except QuotaExceededError:
+            await websocket.send_json({
+                "type": WsMessageType.ERROR,
+                "message": "Screen analysis quota exceeded. Upgrade your plan."
             })
             return
 

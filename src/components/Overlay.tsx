@@ -1,6 +1,8 @@
 import { useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
 import { useInterviewStore } from "../stores/interview";
+import { useFeatureGate } from "../hooks/useFeatureGate";
 import StatusBar from "./StatusBar";
 import Transcription from "./Transcription";
 import Response from "./Response";
@@ -37,18 +39,23 @@ export default function Overlay({
   const setAlwaysOnTop = useInterviewStore((s) => s.setAlwaysOnTop);
   const theme = useInterviewStore((s) => s.theme);
   const screenPanelOpen = useInterviewStore((s) => s.screenPanelOpen);
+  const { allowed: canUseGhostMode } = useFeatureGate("ghost_mode");
+  const { allowed: canUseInvisibleMode } = useFeatureGate("invisible_mode");
   const isActive =
     status === "listening" || status === "thinking" || status === "responding";
 
-  // Listen for Tauri events from the Rust layer
   useEffect(() => {
     const unlistenGhost = listen<boolean>("ghost-mode-changed", (event) => {
-      setGhostMode(event.payload);
+      if (canUseGhostMode) {
+        setGhostMode(event.payload);
+      }
     });
     const unlistenProtect = listen<boolean>(
       "content-protected-changed",
       (event) => {
-        setContentProtected(event.payload);
+        if (canUseInvisibleMode) {
+          setContentProtected(event.payload);
+        }
       },
     );
     const unlistenAlwaysOnTop = listen<boolean>(
@@ -75,7 +82,20 @@ export default function Overlay({
       unlistenAlwaysOnTop.then((fn) => fn());
       unlistenPauseResume.then((fn) => fn());
     };
-  }, [setGhostMode, setContentProtected, setAlwaysOnTop, onPause, onResume]);
+  }, [setGhostMode, setContentProtected, setAlwaysOnTop, onPause, onResume, canUseGhostMode, canUseInvisibleMode]);
+
+  useEffect(() => {
+    if (!canUseInvisibleMode) {
+      const currentProtected = useInterviewStore.getState().contentProtected;
+      if (currentProtected) {
+        invoke<boolean>("toggle_content_protected").then((newState) => {
+          setContentProtected(newState);
+        }).catch(() => {
+          setContentProtected(false);
+        });
+      }
+    }
+  }, [canUseInvisibleMode, setContentProtected]);
 
   const isGlass = theme === "glass";
 

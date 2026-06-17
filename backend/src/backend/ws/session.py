@@ -8,8 +8,10 @@ from backend.context import ConversationHistory
 from backend.llm.prompt import delete_custom_prompt, get_system_prompt, save_custom_prompt
 from backend.llm.protocol import LLMService
 from backend.llm.vision import VisionLLMService
+from backend.plan_gate import FeatureBlockedError, PlanGate, QuotaExceededError
+from backend.tiers import Feature, Quota
 from backend.ws.commands import ParsedCommand, WsCommand
-from backend.ws.message_types import WsStatus
+from backend.ws.message_types import WsMessageType, WsStatus
 from backend.ws_manager import ConnectionManager
 
 logger = logging.getLogger(__name__)
@@ -17,22 +19,31 @@ logger = logging.getLogger(__name__)
 class DialogCoordinator:
     """Orquesta la lógica de negocio puramente: Audio, LLM, Historial. Sin estado de red."""
     
-    def __init__(self, session_id: str, language: str, audio_service: AudioStreamingService, llm_service: LLMService, history: ConversationHistory):
+    def __init__(self, session_id: str, language: str, audio_service: AudioStreamingService, llm_service: LLMService, history: ConversationHistory, plan_gate: PlanGate):
         self.session_id = session_id
         self.language = language
         self.audio = audio_service
         self.llm = llm_service
         self.history = history
+        self.plan_gate = plan_gate
         
-        # Callbacks para emitir eventos sin acoplarse al WebSocket
         self.on_state_change = None 
         self.on_chunk_received = None
         self.on_error = None
         self.on_transcription_received = None
+        self.on_quota_exceeded = None
 
     async def handle_transcription(self, text: str):
         if self.on_transcription_received:
             await self.on_transcription_received(text)
+        
+        estimated_seconds = max(1, len(text.split()) // 3)
+        try:
+            self.plan_gate.consume_quota(Quota.TRANSCRIPTION_SECONDS, estimated_seconds)
+        except QuotaExceededError:
+            if self.on_quota_exceeded:
+                await self.on_quota_exceeded()
+            return
             
         if self.on_state_change:
             await self.on_state_change(WsStatus.THINKING)
@@ -72,6 +83,7 @@ class AgentSession:
         llm_service: LLMService,
         manager: ConnectionManager,
         vision_service: VisionLLMService,
+        plan_gate: PlanGate,
         initial_language: str = "es",
         custom_prompt: str | None = None,
         audio_service: AudioStreamingService | None = None,
@@ -82,6 +94,7 @@ class AgentSession:
         self.llm_service = llm_service
         self.manager = manager
         self.vision_service = vision_service
+        self.plan_gate = plan_gate
 
         self.language = initial_language if initial_language in ("es", "en") else "es"
         self._loop = asyncio.get_running_loop()
@@ -95,18 +108,19 @@ class AgentSession:
         self.history = history or ConversationHistory(self.language, custom_prompt)
         self.audio = audio_service or AudioStreamingService(language=self.language, loop=self._loop)
 
-        # Configurar el coordinador de diálogo
         self.coordinator = DialogCoordinator(
             session_id=self.session_id,
             language=self.language,
             audio_service=self.audio,
             llm_service=self.llm_service,
-            history=self.history
+            history=self.history,
+            plan_gate=self.plan_gate,
         )
         self.coordinator.on_state_change = self._send_status
         self.coordinator.on_chunk_received = self._send_chunk
         self.coordinator.on_error = self._send_error
         self.coordinator.on_transcription_received = self._send_transcription
+        self.coordinator.on_quota_exceeded = self._on_quota_exceeded
 
         self.audio.on_transcription = self.coordinator.handle_transcription
         self.audio.on_user_started_speaking = self._on_user_started_speaking
@@ -124,9 +138,22 @@ class AgentSession:
     async def _send_transcription(self, text: str):
         await self.manager.send_transcription(self.session_id, text)
 
+    async def _send_plan_info(self) -> None:
+        await self.manager.send(
+            self.session_id,
+            WsMessageType.PLAN_INFO,
+            self.plan_gate.get_plan_info(),
+        )
+
+    async def _on_quota_exceeded(self) -> None:
+        await self.audio.pause()
+        await self._send_status(WsStatus.QUOTA_EXCEEDED)
+        await self._send_error("Transcription quota exceeded. Upgrade your plan to continue.")
+
     async def start(self) -> bool:
         await self.manager.connect(self.session_id, self.websocket)
         await self._send_status(WsStatus.CONNECTED)
+        await self._send_plan_info()
 
         logger.info(f"Session {self.session_id} initialized with language '{self.language}'")
         logger.info(f"System prompt for session: {self.history.messages[0]['content'][:150]}...")
@@ -183,6 +210,12 @@ class AgentSession:
             logger.info(f"Session {self.session_id} restarted agent with language '{new_lang}'")
 
     async def _handle_set_prompt(self, cmd: ParsedCommand) -> None:
+        try:
+            self.plan_gate.require_feature(Feature.CUSTOM_PROMPTS)
+        except FeatureBlockedError:
+            await self._send_error("Custom prompts not available in your plan. Upgrade to Pro.")
+            await self._send_status(WsStatus.FEATURE_BLOCKED)
+            return
         custom_prompt = cmd.payload.strip()
         if custom_prompt:
             logger.info(f"Received set_prompt for session {self.session_id}: {custom_prompt[:100]}...")
@@ -192,6 +225,12 @@ class AgentSession:
             await self._send_status(WsStatus.PROMPT_SAVED)
 
     async def _handle_clear_prompt(self, cmd: ParsedCommand) -> None:
+        try:
+            self.plan_gate.require_feature(Feature.CUSTOM_PROMPTS)
+        except FeatureBlockedError:
+            await self._send_error("Custom prompts not available in your plan. Upgrade to Pro.")
+            await self._send_status(WsStatus.FEATURE_BLOCKED)
+            return
         logger.info(f"Received clear_prompt for session {self.session_id}")
         delete_custom_prompt(self.language)
         self.history.set_system_prompt(get_system_prompt(self.language))

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useCallback } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { useInterviewStore } from "../stores/interview";
 import type { Status } from "../stores/interview";
+import type { PlanInfo } from "../stores/slices/planSlice";
 import { WS_MESSAGE_TYPE, WS_STATUS } from "../constants/ws";
 
 const WS_BASE = "ws://localhost:8000/ws";
@@ -26,6 +28,8 @@ export function useWebSocket() {
   const setError = useInterviewStore((s) => s.setError);
   const reset = useInterviewStore((s) => s.reset);
   const incrementQuestionsAnswered = useInterviewStore((s) => s.incrementQuestionsAnswered);
+  const setPlanInfo = useInterviewStore((s) => s.setPlanInfo);
+  const updateQuota = useInterviewStore((s) => s.updateQuota);
 
   const disconnect = useCallback(() => {
     intentionalCloseRef.current = true;
@@ -55,8 +59,9 @@ export function useWebSocket() {
 
     const language = useInterviewStore.getState().language;
     const customPrompt = useInterviewStore.getState().getCustomPrompt();
+    const planId = useInterviewStore.getState().planInfo?.plan_id ?? "lite";
     const promptParam = customPrompt.trim() ? `&prompt=${encodeURIComponent(customPrompt.trim())}` : "";
-    const ws = new WebSocket(`${WS_BASE}?lang=${language}${promptParam}`);
+    const ws = new WebSocket(`${WS_BASE}?lang=${language}&plan=${planId}${promptParam}`);
     wsRef.current = ws;
 
     ws.onopen = () => {
@@ -77,6 +82,16 @@ export function useWebSocket() {
             }
 
             if (rawStatus === WS_STATUS.PROMPT_SAVED || rawStatus === WS_STATUS.PROMPT_CLEARED) {
+              break;
+            }
+
+            if (rawStatus === WS_STATUS.QUOTA_EXCEEDED) {
+              setError("Transcription quota exceeded. Upgrade your plan to continue.");
+              setStatus("paused");
+              break;
+            }
+
+            if (rawStatus === WS_STATUS.FEATURE_BLOCKED) {
               break;
             }
 
@@ -112,6 +127,33 @@ export function useWebSocket() {
           case WS_MESSAGE_TYPE.ERROR:
             setError(msg.data.message);
             break;
+          case WS_MESSAGE_TYPE.PLAN_INFO: {
+            const planInfo = msg.data as unknown as PlanInfo;
+            setPlanInfo(planInfo);
+            invoke("update_plan_permissions", {
+              shortcutsEnabled: planInfo.features.keyboard_shortcuts,
+              invisibleModeEnabled: planInfo.features.invisible_mode,
+              ghostModeEnabled: planInfo.features.ghost_mode,
+            }).catch((err) => console.error("[WS] Failed to update plan permissions:", err));
+            if (!planInfo.features.invisible_mode) {
+              const currentProtected = useInterviewStore.getState().contentProtected;
+              if (currentProtected) {
+                invoke<boolean>("toggle_content_protected")
+                  .then((newState) => {
+                    useInterviewStore.getState().setContentProtected(newState);
+                  })
+                  .catch(() => {
+                    useInterviewStore.getState().setContentProtected(false);
+                  });
+              }
+            }
+            break;
+          }
+          case WS_MESSAGE_TYPE.QUOTA_UPDATE: {
+            const { quota, info } = msg.data as unknown as { quota: string; info: { used: number; limit: number; remaining: number } };
+            updateQuota(quota, info);
+            break;
+          }
         }
       } catch (err) {
         console.error("[WS] Error parsing message:", err, event.data);
@@ -132,7 +174,7 @@ export function useWebSocket() {
     ws.onerror = () => {
       ws.close();
     };
-  }, [setStatus, setTranscription, addResponseChunk, clearResponse, clearAll, setError, incrementQuestionsAnswered]);
+  }, [setStatus, setTranscription, addResponseChunk, clearResponse, clearAll, setError, incrementQuestionsAnswered, setPlanInfo, updateQuota]);
 
   useEffect(() => {
     connectRef.current = connect;

@@ -1,7 +1,8 @@
-import { Mic, Pause, Play, Eye, EyeOff, Square } from "lucide-react";
+import { Mic, Pause, Play, Eye, EyeOff, Square, Lock } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useInterviewStore } from "../stores/interview";
 import { useTranslation } from "../hooks/useTranslation";
+import { useFeatureGate } from "../hooks/useFeatureGate";
 
 interface ControlsProps {
   onPause: () => void;
@@ -21,6 +22,7 @@ export default function Controls({
   const setContentProtected = useInterviewStore((s) => s.setContentProtected);
   const theme = useInterviewStore((s) => s.theme);
   const { t } = useTranslation();
+  const { allowed: canUseInvisibleMode } = useFeatureGate("invisible_mode");
   const isPaused = status === "paused";
 
   const handleToggleProtection = async () => {
@@ -103,17 +105,25 @@ export default function Controls({
       </div>
       <button
         type="button"
-        onClick={handleToggleProtection}
-        className={`flex items-center justify-center w-6 h-6 rounded-full transition-colors cursor-pointer ${
-          theme === "glass"
-            ? "glass-button-active"
-            : contentProtected
-              ? "bg-accent-soft text-accent hover:bg-accent/30"
-              : "bg-red-500/20 text-red-400 hover:bg-red-500/30"
+        onClick={canUseInvisibleMode ? handleToggleProtection : undefined}
+        className={`flex items-center justify-center w-6 h-6 rounded-full transition-colors ${
+          canUseInvisibleMode
+            ? `cursor-pointer ${
+                theme === "glass"
+                  ? "glass-button-active"
+                  : contentProtected
+                    ? "bg-accent-soft text-accent hover:bg-accent/30"
+                    : "bg-red-500/20 text-red-400 hover:bg-red-500/30"
+              }`
+            : "opacity-40 cursor-not-allowed"
         }`}
-        title={contentProtected ? t("contentProtected") : t("contentUnprotected")}
+        title={canUseInvisibleMode ? (contentProtected ? t("contentProtected") : t("contentUnprotected")) : "Ultra"}
       >
-        {contentProtected ? <EyeOff size={20} /> : <Eye size={20} />}
+        {canUseInvisibleMode ? (
+          contentProtected ? <EyeOff size={20} /> : <Eye size={20} />
+        ) : (
+          <Lock size={14} />
+        )}
       </button>
     </div>
   );
