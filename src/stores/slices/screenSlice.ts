@@ -56,6 +56,10 @@ export const createScreenSlice: StateCreator<RootState, [], [], ScreenSlice> = (
   setScreenPrompt: (prompt) => set({ screenPrompt: prompt }),
   canCaptureScreen: () => {
     const state = get();
-    return state.screenImages.length < 4;
+    const plan = state.planInfo;
+    const maxCaptures = plan?.features.simultaneous_captures ? 4 : 1;
+    const quota = plan?.quotas.screen_captures;
+    if (quota && quota.remaining <= 0) return false;
+    return state.screenImages.length < maxCaptures;
   },
 });

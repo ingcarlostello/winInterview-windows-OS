@@ -1,4 +1,4 @@
-import { Bot, Eye, Layers, Monitor, Minus, Pin, PinOff, X } from "lucide-react";
+import { Bot, Crown, Eye, Layers, Monitor, Minus, Pin, PinOff, X } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useInterviewStore } from "../stores/interview";
 import type { Status } from "../stores/interview";
@@ -92,10 +92,15 @@ export default function StatusBar({ onChangeLanguage, onToggleScreenPanel }: Sta
   const alwaysOnTop = useInterviewStore((s) => s.alwaysOnTop);
   const theme = useInterviewStore((s) => s.theme);
   const screenPanelOpen = useInterviewStore((s) => s.screenPanelOpen);
+  const planInfo = useInterviewStore((s) => s.planInfo);
   const config = statusConfig[status];
   const { t } = useTranslation();
   const { allowed: canUseGhostMode } = useFeatureGate("ghost_mode");
   const { allowed: canUseInvisibleMode } = useFeatureGate("invisible_mode");
+
+  const planName = planInfo?.plan_name ?? "Lite";
+  const planId = planInfo?.plan_id ?? "lite";
+  const planColorClass = planId === "ultra" ? "text-purple-400" : planId === "pro" ? "text-amber" : "text-white/50";
 
   const handleClose = () => getCurrentWindow().close();
   const handleMinimize = () => getCurrentWindow().minimize();
@@ -158,6 +163,11 @@ export default function StatusBar({ onChangeLanguage, onToggleScreenPanel }: Sta
               {theme === "dark" ? "Dark" : t("themeGlass")}
             </span>
           </button>
+
+          <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-white/10 bg-white/5 ${planColorClass}`}>
+            <Crown size={12} />
+            <span className="text-[10px] font-medium">{planName}</span>
+          </div>
 
           {onToggleScreenPanel && (
             <button

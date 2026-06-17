@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
 import { useInterviewStore } from "../stores/interview";
 import { useFeatureGate } from "../hooks/useFeatureGate";
 import StatusBar from "./StatusBar";
@@ -82,6 +83,19 @@ export default function Overlay({
       unlistenPauseResume.then((fn) => fn());
     };
   }, [setGhostMode, setContentProtected, setAlwaysOnTop, onPause, onResume, canUseGhostMode, canUseInvisibleMode]);
+
+  useEffect(() => {
+    if (!canUseInvisibleMode) {
+      const currentProtected = useInterviewStore.getState().contentProtected;
+      if (currentProtected) {
+        invoke<boolean>("toggle_content_protected").then((newState) => {
+          setContentProtected(newState);
+        }).catch(() => {
+          setContentProtected(false);
+        });
+      }
+    }
+  }, [canUseInvisibleMode, setContentProtected]);
 
   const isGlass = theme === "glass";
 

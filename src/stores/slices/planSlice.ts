@@ -33,7 +33,7 @@ export interface PlanSlice {
   getQuota: (quotaKey: string) => QuotaInfo | null;
 }
 
-const DEFAULT_PLAN_INFO: PlanInfo = {
+export const DEFAULT_PLAN_INFO: PlanInfo = {
   plan_id: "lite",
   plan_name: "Lite",
   features: {
@@ -44,7 +44,11 @@ const DEFAULT_PLAN_INFO: PlanInfo = {
     invisible_mode: false,
     ghost_mode: false,
   },
-  quotas: {},
+  quotas: {
+    transcription_seconds: { used: 0, limit: 1200, remaining: 1200 },
+    screen_captures: { used: 0, limit: 2, remaining: 2 },
+    screen_analyses: { used: 0, limit: 2, remaining: 2 },
+  },
 };
 
 export const createPlanSlice: StateCreator<RootState, [], [], PlanSlice> = (
@@ -71,7 +75,7 @@ export const createPlanSlice: StateCreator<RootState, [], [], PlanSlice> = (
   },
 
   getQuota: (quotaKey) => {
-    const plan = get().planInfo;
-    return plan?.quotas[quotaKey] ?? null;
+    const plan = get().planInfo ?? DEFAULT_PLAN_INFO;
+    return plan.quotas[quotaKey] ?? null;
   },
 });

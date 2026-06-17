@@ -135,6 +135,18 @@ export function useWebSocket() {
               invisibleModeEnabled: planInfo.features.invisible_mode,
               ghostModeEnabled: planInfo.features.ghost_mode,
             }).catch((err) => console.error("[WS] Failed to update plan permissions:", err));
+            if (!planInfo.features.invisible_mode) {
+              const currentProtected = useInterviewStore.getState().contentProtected;
+              if (currentProtected) {
+                invoke<boolean>("toggle_content_protected")
+                  .then((newState) => {
+                    useInterviewStore.getState().setContentProtected(newState);
+                  })
+                  .catch(() => {
+                    useInterviewStore.getState().setContentProtected(false);
+                  });
+              }
+            }
             break;
           }
           case WS_MESSAGE_TYPE.QUOTA_UPDATE: {

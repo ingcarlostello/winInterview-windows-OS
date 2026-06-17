@@ -1,4 +1,4 @@
-import { Monitor, Sparkles, RefreshCw, Camera } from "lucide-react";
+import { Monitor, Sparkles, RefreshCw, Camera, Lock } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
@@ -33,6 +33,7 @@ export default function ScreenPanel() {
   const wsRef = useRef<WebSocket | null>(null);
   const { t } = useTranslation();
   const { allowed: canUseSimultaneousCaptures } = useFeatureGate("simultaneous_captures");
+  const { allowed: canUseCustomPrompts } = useFeatureGate("custom_prompts");
   const { remaining: capturesRemaining, exceeded: capturesExceeded } = useQuotaInfo("screen_captures");
 
   const MAX_CAPTURES = canUseSimultaneousCaptures ? MAX_CAPTURES_ULTRA : MAX_CAPTURES_LITE;
@@ -235,18 +236,25 @@ export default function ScreenPanel() {
                 <span className="text-accent text-[10px] font-semibold uppercase tracking-wider">
                   {t("promptForLLM")}
                 </span>
+                {!canUseCustomPrompts && (
+                  <span className="flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-medium rounded-full bg-accent-soft text-accent">
+                    <Lock size={8} />
+                    Pro
+                  </span>
+                )}
               </div>
               <div className="border border-white/10 rounded-xl overflow-hidden">
                 <textarea
                   value={screenPrompt}
                   onChange={(e) => setScreenPrompt(e.target.value)}
                   placeholder={t("promptPlaceholder")}
-                  className="w-full min-h-[80px] bg-black/20 px-3 py-2 text-white text-xs resize-y focus:outline-none focus:bg-black/30 transition-colors"
+                  disabled={!canUseCustomPrompts}
+                  className="w-full min-h-[80px] bg-black/20 px-3 py-2 text-white text-xs resize-y focus:outline-none focus:bg-black/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 />
                 <div className="border-t border-white/10 px-3 py-2 flex justify-end">
                   <button
                     onClick={handleAnalyze}
-                    disabled={isAnalyzingScreen}
+                    disabled={isAnalyzingScreen || !canUseCustomPrompts}
                     className="flex items-center gap-2 px-4 py-1.5 rounded-lg bg-accent/20 border border-accent-border text-accent text-xs font-medium hover:bg-accent/30 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isAnalyzingScreen ? (
