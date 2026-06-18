@@ -68,7 +68,7 @@ export function useWebSocket() {
       const token = await getToken();
       const language = useInterviewStore.getState().language;
       const customPrompt = useInterviewStore.getState().getCustomPrompt();
-      const planId = useInterviewStore.getState().planInfo?.plan_id ?? "lite";
+      const planId = useInterviewStore.getState().planInfo?.plan_id ?? "free";
       const promptParam = customPrompt.trim() ? `&prompt=${encodeURIComponent(customPrompt.trim())}` : "";
       
       const ws = new WebSocket(`${WS_BASE}?lang=${language}&plan=${planId}&token=${token}${promptParam}`);

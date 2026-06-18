@@ -17,6 +17,32 @@ static GHOST_MODE_ENABLED: AtomicBool = AtomicBool::new(false);
 // ── Tauri commands ──────────────────────────────────────────────────────────
 
 #[tauri::command]
+fn open_url(url: String) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    let cmd = "open";
+    #[cfg(all(target_os = "windows"))]
+    let cmd = "cmd";
+    #[cfg(target_os = "linux")]
+    let cmd = "xdg-open";
+
+    #[cfg(all(target_os = "windows"))]
+    {
+        std::process::Command::new(cmd)
+            .args(["/C", "start", "", &url])
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(not(all(target_os = "windows")))]
+    {
+        std::process::Command::new(cmd)
+            .arg(&url)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
 async fn capture_screen(window: tauri::Window) -> Result<String, String> {
     let current_monitor_name = window
         .current_monitor()
@@ -208,6 +234,7 @@ pub fn run() {
             set_window_expanded,
             get_stealth_state,
             update_plan_permissions,
+            open_url,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

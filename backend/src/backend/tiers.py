@@ -3,6 +3,7 @@ from enum import StrEnum
 
 
 class PlanId(StrEnum):
+    FREE = "free"
     LITE = "lite"
     PRO = "pro"
     ULTRA = "ultra"
@@ -33,6 +34,17 @@ class PlanDefinition:
 
 
 PLANS: dict[PlanId, PlanDefinition] = {
+    PlanId.FREE: PlanDefinition(
+        id=PlanId.FREE,
+        name="Free",
+        price_usd=0.0,
+        features=frozenset(),
+        quotas={
+            Quota.TRANSCRIPTION_SECONDS: 3 * 60,
+            Quota.SCREEN_CAPTURES: 1,
+            Quota.SCREEN_ANALYSES: 1,
+        },
+    ),
     PlanId.LITE: PlanDefinition(
         id=PlanId.LITE,
         name="Lite",

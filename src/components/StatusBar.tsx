@@ -10,11 +10,13 @@ import {
   X,
   Clock,
 } from "lucide-react";
+import { useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useInterviewStore } from "../stores/interview";
 import type { Status } from "../stores/interview";
 import LanguageSelector from "./LanguageSelector";
 import SessionTimer from "./SessionTimer";
+import PricingModal from "./PricingModal";
 import { useTranslation } from "../hooks/useTranslation";
 import { useFeatureGate, useQuotaInfo } from "../hooks/useFeatureGate";
 
@@ -110,6 +112,7 @@ export default function StatusBar({
   const planInfo = useInterviewStore((s) => s.planInfo);
   const config = statusConfig[status];
   const { t } = useTranslation();
+  const [pricingOpen, setPricingOpen] = useState(false);
   const { allowed: canUseGhostMode } = useFeatureGate("ghost_mode");
   const { allowed: canUseInvisibleMode } = useFeatureGate("invisible_mode");
   const { remaining: transcriptionRemaining, exceeded: transcriptionExceeded } =
@@ -119,8 +122,8 @@ export default function StatusBar({
   );
   const countdownActive = useInterviewStore((s) => s.countdownActive);
 
-  const planName = planInfo?.plan_name ?? "Lite";
-  const planId = planInfo?.plan_id ?? "lite";
+  const planName = planInfo?.plan_name ?? "Free";
+  const planId = planInfo?.plan_id ?? "free";
   const planColorClass =
     planId === "ultra"
       ? "text-purple-400"
@@ -211,12 +214,14 @@ export default function StatusBar({
             )}
           </span>
 
-          <div
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-white/10 bg-white/5 ${planColorClass}`}
+          <button
+            onClick={() => setPricingOpen(true)}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-white/10 bg-white/5 hover:bg-white/10 transition-colors cursor-pointer ${planColorClass}`}
+            title={t("pricingTitle")}
           >
             <Crown size={12} />
             <span className="text-[10px] font-medium">{planName}</span>
-          </div>
+          </button>
         </div>
       </div>
 
@@ -342,6 +347,8 @@ export default function StatusBar({
           </span>
         </div>
       </div>
+
+      <PricingModal isOpen={pricingOpen} onClose={() => setPricingOpen(false)} />
     </>
   );
 }

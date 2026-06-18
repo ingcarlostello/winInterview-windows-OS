@@ -25,7 +25,7 @@ export const decrementQuota = internalMutation({
       .unique();
 
     if (!quota) {
-      const planQuotas = PLAN_QUOTAS[user.planId as PlanId] ?? PLAN_QUOTAS.lite;
+      const planQuotas = PLAN_QUOTAS[user.planId as PlanId] ?? PLAN_QUOTAS.free;
       const newQuotaId = await ctx.db.insert("quotas", {
         userId: user._id,
         month,
@@ -118,7 +118,7 @@ export const decrementMyQuota = mutation({
       .unique();
 
     if (!quota) {
-      const planQuotas = PLAN_QUOTAS[user.planId as PlanId] ?? PLAN_QUOTAS.lite;
+      const planQuotas = PLAN_QUOTAS[user.planId as PlanId] ?? PLAN_QUOTAS.free;
       const newQuotaId = await ctx.db.insert("quotas", {
         userId: user._id,
         month,
