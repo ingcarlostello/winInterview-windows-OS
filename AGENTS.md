@@ -9,7 +9,7 @@
 - The app runs as a transparent, always-on-top overlay (`730×730` collapsed, `1600×730` expanded, frameless) designed to float over Zoom/Meet
 - **Flow**: Microphone → PyAudio (16kHz PCM) → streamed to Deepgram Agent (ASR only) → transcription triggers LLM streaming via NVIDIA Gemma → Response chunks via WebSocket → Frontend renders Markdown + code blocks
 - **Screen capture**: Tauri command `capture_screen` in `src-tauri/src/lib.rs` uses the `xcap` crate to capture the first monitor, resizes to a max width of 1280 px, encodes as JPEG (quality 75), and returns base64 → stored in Zustand (`screenImages`, max 4). Each successful capture decrements `screen_captures` quota in Convex via `useCaptureQuota`. VisionLLMService (Qwen) analyzes captures via separate WebSocket
-- **Tier system**: Lite/Pro/Ultra plans gate features and quotas. **Convex is the source of truth** for `planId` and quota remaining; the Python backend reads them on every WebSocket connection via `ConvexClient` and enforces limits with `PlanGate`. Zustand (`planSlice`) caches the live state and receives updates from both the backend WebSocket (`PLAN_INFO`/`QUOTA_UPDATE`) and a reactive Convex query (`users.getCurrentUserPlanInfo`). Rust is a shortcut guardian (`update_plan_permissions`). Quotas reset per calendar month.
+- **Tier system**: Lite/Pro/Ultra plans gate features and quotas. **Convex is the source of truth** for `planId` and quota remaining; the Python backend reads them on every WebSocket connection via `ConvexClient` and enforces limits with `PlanGate`. Zustand (`planSlice`) caches the live state and receives updates from both the backend WebSocket (`PLAN_INFO`/`QUOTA_UPDATE`) and a reactive Convex query (`users.getCurrentUserPlanInfo`). Rust is a shortcut guardian (`update_plan_permissions`). Quotas reset per calendar month. **Paddle** manages subscriptions via webhooks → Convex updates `planId`; users without a subscription are on the `free` tier (3 min transcription trial, 0 captures/analyses).
 
 ## Commands
 
@@ -343,6 +343,101 @@ The Python backend (`backend/src/backend/auth/clerk.py`) independently verifies 
 - `verify_clerk_token()` decodes RS256 JWTs, extracts `clerk_id`
 - Used in WebSocket handler to initialize `PlanGate` for in-memory quota tracking
 - Backend can call `POST /api/quotas/decrement` on Convex (authenticated via `CONVEX_BACKEND_KEY`)
+
+## Billing (Paddle)
+
+The app uses **Paddle** for subscription billing. Paddle manages checkout, payment, and subscription lifecycle via webhooks to Convex.
+
+### Architecture
+
+- **Paddle** handles checkout (hosted), payment processing, and subscription lifecycle
+- **Convex** receives webhooks from Paddle and updates `users.planId` + paddle fields
+- The `free` tier is the default for users without a subscription (3 min transcription, 0 captures/analyses)
+- Lite/Pro/Ultra are paid tiers ($4.99/$19.99/$59.99 monthly) — subscription required to unlock
+- Flow: User clicks "Subscribe" → `createCheckout` action creates Paddle transaction → Tauri opens hosted checkout URL → user pays → Paddle webhook → `applySubscription` mutation → `planId` updated → reactive query auto-updates frontend
+
+### Paddle Configuration
+
+**Dashboard setup required:**
+
+1. **Product**: "Interview Responder" (tax_category: `saas`)
+2. **Prices**: 3 monthly recurring prices with `custom_data.plan_id` set to `"lite"`, `"pro"`, `"ultra"`
+3. **Notification setting**: URL `https://<deployment>.convex.site/api/webhooks/paddle` with subscription events
+
+**Environment variables:**
+
+- **Convex** (set via `npx convex env set`):
+  - `PADDLE_API_KEY` — Paddle API key for server-side calls (create transactions, find/create customers)
+  - `PADDLE_WEBHOOK_SECRET` — Webhook signing secret (`endpoint_secret_key` from notification setting)
+  - `PADDLE_API_URL` — API base URL (default: `https://sandbox-api.paddle.com` for sandbox)
+  - `PADDLE_PRICE_LITE` / `PADDLE_PRICE_PRO` / `PADDLE_PRICE_ULTRA` — Override sandbox price IDs (optional; sandbox IDs are hardcoded as fallback)
+
+### Subscription Flow
+
+```
+Frontend (PricingModal) → useCheckout → Convex action: paddle.createCheckout
+    → Paddle: transactions.create (with custom_data.clerk_id + plan_id)
+    → Returns checkout.url → Tauri open_url command opens browser
+    → User pays → Paddle fires webhook
+    → POST /api/webhooks/paddle (Convex httpAction)
+    → Verifies Paddle-Signature (HMAC-SHA256, ts;h1 format)
+    → Extracts clerk_id from custom_data, plan_id from price.custom_data
+    → internal.users.applySubscription → updates planId + quotas + paddle fields
+    → getCurrentUserPlanInfo (reactive) → planSlice → features unlocked
+```
+
+### Webhook Events Handled
+
+| Event | Action |
+|---|---|
+| `subscription.activated` | Set plan from price.custom_data.plan_id |
+| `subscription.updated` | Update plan (upgrade/downgrade) |
+| `subscription.created` | Store subscription data |
+| `subscription.canceled` | Revert to `free` |
+| `subscription.past_due` | Revert to `free` |
+| `subscription.paused` | Revert to `free` |
+| `subscription.resumed` | Restore plan from price.custom_data.plan_id |
+| `transaction.completed` | Backup confirmation — set plan |
+| `transaction.payment_failed` | Log warning |
+
+### Convex Schema (Paddle fields on `users`)
+
+- `paddleCustomerId` — Paddle customer ID (`ctm_...`)
+- `paddleSubscriptionId` — Paddle subscription ID (`sub_...`)
+- `paddleStatus` — `active` | `canceled` | `past_due` | `paused`
+- `paddleCancelUrl` — Management URL for cancellation
+- `paddleUpdatePaymentUrl` — Management URL for payment method update
+- `subscriptionCurrentPeriodEnd` — Current billing period end date
+- Indexes: `by_paddle_customer`, `by_paddle_subscription`
+
+### Key Files
+
+| File | Purpose |
+|---|---|
+| `convex/paddle.ts` | `paddleWebhook` httpAction (verifies Paddle-Signature, processes events) + `createCheckout` action (creates Paddle transaction, finds/creates customer) |
+| `convex/http.ts` | Registers `/api/webhooks/paddle` and existing routes |
+| `convex/users.ts` | `applySubscription` (internalMutation — the ONLY way to change planId), `getCurrentUserSubscription` query |
+| `convex/constants.ts` | `PlanId` includes `free`, `PLAN_QUOTAS.free`, `PLAN_PRICES_USD` |
+| `src/hooks/useCheckout.ts` | Calls `createCheckout` action, opens checkout URL via Tauri `open_url` command |
+| `src/components/PricingModal.tsx` | 3-tier pricing UI, subscribe buttons, subscription management (cancel/update payment via management_urls) |
+| `src/components/StatusBar.tsx` | Crown badge opens PricingModal |
+| `src-tauri/src/lib.rs` | `open_url` command — opens external URLs in system browser (cross-platform) |
+
+### Security
+
+- **`updateUserPlan` was converted to `internalMutation` (`applySubscription`)** — the ONLY way to change `planId` is through the Paddle webhook. Previously it was a public mutation (security vulnerability).
+- Webhook signature verification uses HMAC-SHA256 with `Paddle-Signature` header (`ts` + `h1` format)
+- Timestamp tolerance: 5 minutes (anti-replay)
+- `createCheckout` action requires authenticated Clerk identity
+- `PADDLE_API_KEY` is server-side only (Convex env, never exposed to frontend)
+
+### Paddle Sandbox IDs (dev)
+
+- Product: `pro_01kvc6na730nwkyafndw2dpa3n`
+- Price Lite: `pri_01kvc6na8fharg06tas9cb5da4`
+- Price Pro: `pri_01kvc6na9wsxctyp9291jtmer6`
+- Price Ultra: `pri_01kvc6nab71h76fpdcx203wkag`
+- Notification setting: `ntfset_01kvc6nn781ktgwfd8n5sqrqfd`
 
 ## Other files
 

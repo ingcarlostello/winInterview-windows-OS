@@ -69,7 +69,41 @@ export type TranslationKey =
   | "quotaExhausted"
   | "quotaExhaustedTooltip"
   | "timeRemaining"
-  | "sessionTimeTooltip";
+  | "sessionTimeTooltip"
+  | "pricingTitle"
+  | "pricingSubtitle"
+  | "btnSubscribe"
+  | "btnCurrentPlan"
+  | "btnManage"
+  | "btnCancelSub"
+  | "btnUpdatePayment"
+  | "checkoutRedirecting"
+  | "checkoutError"
+  | "perMonth"
+  | "freeTierDesc"
+  | "freeTrialFeatures"
+  | "planFree"
+  | "planLite"
+  | "planPro"
+  | "planUltra"
+  | "featRealTime"
+  | "featStreaming"
+  | "featAlwaysOnTop"
+  | "featCustomPrompts"
+  | "featSimCaptures"
+  | "featSimAnalysis"
+  | "featShortcuts"
+  | "featInvisible"
+  | "featGhost"
+  | "quotaCaptures"
+  | "quotaAnalyses"
+  | "quotaTranscription"
+  | "subActive"
+  | "subCanceled"
+  | "subPastDue"
+  | "subPaused"
+  | "subStatus"
+  | "closeModal";
 
 const translations: Record<Language, Record<TranslationKey, string>> = {
   es: {
@@ -144,6 +178,40 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     quotaExhaustedTooltip: "Has usado todos tus minutos de transcripción. Actualiza tu plan para continuar.",
     timeRemaining: "{count}m restantes",
     sessionTimeTooltip: "Tiempo de sesión transcurrido",
+    pricingTitle: "Planes",
+    pricingSubtitle: "Elige el plan que se ajuste a tus necesidades",
+    btnSubscribe: "Suscribirse",
+    btnCurrentPlan: "Plan actual",
+    btnManage: "Gestionar",
+    btnCancelSub: "Cancelar suscripción",
+    btnUpdatePayment: "Actualizar pago",
+    checkoutRedirecting: "Redirigiendo al checkout...",
+    checkoutError: "Error al iniciar el checkout",
+    perMonth: "/mes",
+    freeTierDesc: "Plan gratuito",
+    freeTrialFeatures: "Prueba: 3 min transcripción + 1 captura + 1 análisis",
+    planFree: "Free",
+    planLite: "Lite",
+    planPro: "Pro",
+    planUltra: "Ultra",
+    featRealTime: "Transcripción en tiempo real",
+    featStreaming: "Respuestas en streaming",
+    featAlwaysOnTop: "Siempre on top",
+    featCustomPrompts: "Custom prompts",
+    featSimCaptures: "Capturas simultáneas",
+    featSimAnalysis: "Análisis simultáneos",
+    featShortcuts: "Atajos del teclado",
+    featInvisible: "Modo invisible",
+    featGhost: "Modo Fantasma (click-through)",
+    quotaCaptures: "{count} capturas/mes",
+    quotaAnalyses: "{count} análisis/mes",
+    quotaTranscription: "{count} min de conversación/mes",
+    subActive: "Activa",
+    subCanceled: "Cancelada",
+    subPastDue: "Pago pendiente",
+    subPaused: "Pausada",
+    subStatus: "Estado de suscripción",
+    closeModal: "Cerrar",
   },
   en: {
     statusDisconnected: "Disconnected",
@@ -217,6 +285,40 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     quotaExhaustedTooltip: "You've used all your transcription minutes. Upgrade your plan to continue.",
     timeRemaining: "{count}m left",
     sessionTimeTooltip: "Session time elapsed",
+    pricingTitle: "Plans",
+    pricingSubtitle: "Choose the plan that fits your needs",
+    btnSubscribe: "Subscribe",
+    btnCurrentPlan: "Current plan",
+    btnManage: "Manage",
+    btnCancelSub: "Cancel subscription",
+    btnUpdatePayment: "Update payment",
+    checkoutRedirecting: "Redirecting to checkout...",
+    checkoutError: "Error starting checkout",
+    perMonth: "/mo",
+    freeTierDesc: "Free plan",
+    freeTrialFeatures: "Trial: 3 min transcription + 1 capture + 1 analysis",
+    planFree: "Free",
+    planLite: "Lite",
+    planPro: "Pro",
+    planUltra: "Ultra",
+    featRealTime: "Real-time transcription",
+    featStreaming: "Streaming responses",
+    featAlwaysOnTop: "Always on top",
+    featCustomPrompts: "Custom prompts",
+    featSimCaptures: "Simultaneous captures",
+    featSimAnalysis: "Simultaneous analysis",
+    featShortcuts: "Keyboard shortcuts",
+    featInvisible: "Invisible mode",
+    featGhost: "Ghost mode (click-through)",
+    quotaCaptures: "{count} captures/mo",
+    quotaAnalyses: "{count} analyses/mo",
+    quotaTranscription: "{count} min conversation/mo",
+    subActive: "Active",
+    subCanceled: "Canceled",
+    subPastDue: "Payment pending",
+    subPaused: "Paused",
+    subStatus: "Subscription status",
+    closeModal: "Close",
   },
 };
 

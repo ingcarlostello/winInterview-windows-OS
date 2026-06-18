@@ -1,7 +1,7 @@
 import type { StateCreator } from "zustand";
 import type { RootState } from "../interview";
 
-export type PlanId = "lite" | "pro" | "ultra";
+export type PlanId = "free" | "lite" | "pro" | "ultra";
 
 export interface FeatureFlags {
   custom_prompts: boolean;
@@ -41,8 +41,8 @@ export interface PlanSlice {
 }
 
 export const DEFAULT_PLAN_INFO: PlanInfo = {
-  plan_id: "lite",
-  plan_name: "Lite",
+  plan_id: "free",
+  plan_name: "Free",
   features: {
     custom_prompts: false,
     simultaneous_captures: false,
@@ -52,9 +52,9 @@ export const DEFAULT_PLAN_INFO: PlanInfo = {
     ghost_mode: false,
   },
   quotas: {
-    transcription_seconds: { used: 0, limit: 1200, remaining: 1200 },
-    screen_captures: { used: 0, limit: 2, remaining: 2 },
-    screen_analyses: { used: 0, limit: 2, remaining: 2 },
+    transcription_seconds: { used: 0, limit: 180, remaining: 180 },
+    screen_captures: { used: 0, limit: 1, remaining: 1 },
+    screen_analyses: { used: 0, limit: 1, remaining: 1 },
   },
 };
 

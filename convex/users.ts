@@ -36,7 +36,7 @@ export const getUserAndQuotaByClerkId = internalQuery({
       return null;
     }
 
-    const planId = (user.planId as PlanId) ?? "lite";
+    const planId = (user.planId as PlanId) ?? "free";
     const month = new Date().toISOString().slice(0, 7);
 
     const quota = await ctx.db
@@ -46,7 +46,7 @@ export const getUserAndQuotaByClerkId = internalQuery({
       )
       .unique();
 
-    const limits = PLAN_QUOTAS[planId] ?? PLAN_QUOTAS.lite;
+    const limits = PLAN_QUOTAS[planId] ?? PLAN_QUOTAS.free;
 
     return {
       clerkId: user.clerkId,
@@ -105,12 +105,12 @@ export const storeUser = mutation({
       email: identity.email,
       name: identity.name,
       imageUrl: identity.pictureUrl,
-      planId: "lite",
+      planId: "free",
       tokenIdentifier: identity.tokenIdentifier,
     });
 
     const month = new Date().toISOString().slice(0, 7);
-    const quotas = PLAN_QUOTAS.lite;
+    const quotas = PLAN_QUOTAS.free;
     await ctx.db.insert("quotas", {
       userId: newUserId,
       month,
@@ -158,7 +158,7 @@ export const getCurrentUserPlanInfo = query({
       return null;
     }
 
-    const planId = (user.planId as PlanId) ?? "lite";
+    const planId = (user.planId as PlanId) ?? "free";
     const month = new Date().toISOString().slice(0, 7);
 
     const quota = await ctx.db
@@ -168,7 +168,7 @@ export const getCurrentUserPlanInfo = query({
       )
       .unique();
 
-    const limits = PLAN_QUOTAS[planId] ?? PLAN_QUOTAS.lite;
+    const limits = PLAN_QUOTAS[planId] ?? PLAN_QUOTAS.free;
 
     const transcriptionSecondsRemaining =
       quota?.transcriptionSecondsRemaining ?? limits.transcriptionSeconds;
@@ -202,32 +202,43 @@ export const getCurrentUserPlanInfo = query({
   },
 });
 
-export const updateUserPlan = mutation({
+export const applySubscription = internalMutation({
   args: {
+    clerkId: v.string(),
     planId: v.string(),
+    paddleCustomerId: v.optional(v.string()),
+    paddleSubscriptionId: v.optional(v.string()),
+    paddleStatus: v.optional(v.string()),
+    paddleCancelUrl: v.optional(v.string()),
+    paddleUpdatePaymentUrl: v.optional(v.string()),
+    subscriptionCurrentPeriodEnd: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      throw new Error("Unauthenticated");
-    }
-
     if (!PLAN_QUOTAS[args.planId as PlanId]) {
       throw new Error(`Invalid plan: ${args.planId}`);
     }
 
     const user = await ctx.db
       .query("users")
-      .withIndex("by_token", (q) =>
-        q.eq("tokenIdentifier", identity.tokenIdentifier)
-      )
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
       .unique();
 
     if (!user) {
       throw new Error("User not found");
     }
 
-    await ctx.db.patch(user._id, { planId: args.planId });
+    const planId = args.planId as PlanId;
+    const previousPlanId = user.planId as PlanId;
+
+    const patch: Record<string, unknown> = { planId };
+    if (args.paddleCustomerId !== undefined) patch.paddleCustomerId = args.paddleCustomerId;
+    if (args.paddleSubscriptionId !== undefined) patch.paddleSubscriptionId = args.paddleSubscriptionId;
+    if (args.paddleStatus !== undefined) patch.paddleStatus = args.paddleStatus;
+    if (args.paddleCancelUrl !== undefined) patch.paddleCancelUrl = args.paddleCancelUrl;
+    if (args.paddleUpdatePaymentUrl !== undefined) patch.paddleUpdatePaymentUrl = args.paddleUpdatePaymentUrl;
+    if (args.subscriptionCurrentPeriodEnd !== undefined) patch.subscriptionCurrentPeriodEnd = args.subscriptionCurrentPeriodEnd;
+
+    await ctx.db.patch(user._id, patch);
 
     const month = new Date().toISOString().slice(0, 7);
     const existingQuota = await ctx.db
@@ -237,23 +248,16 @@ export const updateUserPlan = mutation({
       )
       .unique();
 
-    const newQuotas = PLAN_QUOTAS[args.planId as PlanId];
+    const newQuotas = PLAN_QUOTAS[planId];
 
     if (existingQuota) {
-      await ctx.db.patch(existingQuota._id, {
-        transcriptionSecondsRemaining: Math.max(
-          existingQuota.transcriptionSecondsRemaining,
-          newQuotas.transcriptionSeconds
-        ),
-        capturesRemaining: Math.max(
-          existingQuota.capturesRemaining,
-          newQuotas.captures
-        ),
-        analysesRemaining: Math.max(
-          existingQuota.analysesRemaining,
-          newQuotas.analyses
-        ),
-      });
+      if (previousPlanId !== planId) {
+        await ctx.db.patch(existingQuota._id, {
+          transcriptionSecondsRemaining: newQuotas.transcriptionSeconds,
+          capturesRemaining: newQuotas.captures,
+          analysesRemaining: newQuotas.analyses,
+        });
+      }
     } else {
       await ctx.db.insert("quotas", {
         userId: user._id,
@@ -265,6 +269,36 @@ export const updateUserPlan = mutation({
     }
 
     return user._id;
+  },
+});
+
+export const getCurrentUserSubscription = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return null;
+    }
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_token", (q) =>
+        q.eq("tokenIdentifier", identity.tokenIdentifier)
+      )
+      .unique();
+
+    if (!user) {
+      return null;
+    }
+
+    return {
+      planId: user.planId as PlanId,
+      paddleStatus: user.paddleStatus ?? null,
+      paddleSubscriptionId: user.paddleSubscriptionId ?? null,
+      paddleCancelUrl: user.paddleCancelUrl ?? null,
+      paddleUpdatePaymentUrl: user.paddleUpdatePaymentUrl ?? null,
+      subscriptionCurrentPeriodEnd: user.subscriptionCurrentPeriodEnd ?? null,
+    };
   },
 });
 
@@ -365,11 +399,11 @@ export const createUserFromClerk = internalMutation({
       email: args.email,
       name: args.name,
       imageUrl: args.imageUrl,
-      planId: "lite",
+      planId: "free",
     });
 
     const month = new Date().toISOString().slice(0, 7);
-    const quotas = PLAN_QUOTAS.lite;
+    const quotas = PLAN_QUOTAS.free;
     await ctx.db.insert("quotas", {
       userId: newUserId,
       month,
