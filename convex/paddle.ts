@@ -340,13 +340,19 @@ export const createCheckout = action({
       throw new Error(`Paddle API error: ${response.status} ${errorBody}`);
     }
 
-    const transaction = await response.json();
-    const checkoutUrl = transaction?.checkout?.url;
-    if (!checkoutUrl) {
-      throw new Error("Paddle did not return a checkout URL");
+    const body = (await response.json()) as { data?: Record<string, unknown> };
+    const transaction = body.data;
+    const transactionId = transaction?.id;
+    if (!transactionId || typeof transactionId !== "string") {
+      console.error("[Paddle createCheckout] Response structure:", {
+        hasData: !!body.data,
+        id: transaction?.id,
+        status: transaction?.status,
+      });
+      throw new Error("Paddle did not return a transaction ID");
     }
 
-    return { checkoutUrl: checkoutUrl as string, transactionId: transaction.id as string };
+    return { transactionId };
   },
 });
 
@@ -387,6 +393,6 @@ async function findOrCreatePaddleCustomer(
     return undefined;
   }
 
-  const customer = await createResponse.json();
-  return customer?.id as string | undefined;
+  const customerBody = (await createResponse.json()) as { data?: Record<string, unknown> };
+  return customerBody.data?.id as string | undefined;
 }
