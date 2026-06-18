@@ -10,6 +10,22 @@
       "type": "remote",
       "url": "https://mcp.clerk.com/mcp",
       "enabled": true
+    },
+    "paddle-sandbox": {
+      "type": "remote",
+      "url": "https://sandbox-mcp.paddle.com/mcp",
+      "enabled": true,
+      "headers": {
+        "Authorization": "Bearer {env:PADDLE_SANDBOX_API_KEY}"
+      }
+    },
+    "paddle-live": {
+      "type": "remote",
+      "url": "https://mcp.paddle.com/mcp",
+      "enabled": true,
+      "headers": {
+        "Authorization": "Bearer {env:PADDLE_LIVE_API_KEY}"
+      }
     }
   }
 }
