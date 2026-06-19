@@ -4,17 +4,26 @@ import Overlay from "./components/Overlay";
 import { useWebSocket } from "./hooks/useWebSocket";
 import { useInterviewStore } from "./stores/interview";
 import { invoke } from "@tauri-apps/api/core";
-import { SignedIn, SignedOut, SignIn } from "@clerk/clerk-react";
+import { SignedIn, SignedOut, SignIn, useClerk } from "@clerk/clerk-react";
+import AuthGate from "./components/AuthGate";
 import EnsureConvexUser from "./components/EnsureConvexUser";
 import { usePlanSync } from "./hooks/usePlanSync";
 import { useScreenCapture } from "./hooks/useScreenCapture";
 import { useTranscriptionCountdown } from "./hooks/useTranscriptionCountdown";
+import { usePendingUpgrade } from "./hooks/usePendingUpgrade";
 
 export default function App() {
   const { send, disconnect, connect, setPrompt, restoreDefaultPrompt, changeLanguage } = useWebSocket();
+  const { signOut } = useClerk();
   usePlanSync();
   const { captureScreen } = useScreenCapture();
   useTranscriptionCountdown();
+  usePendingUpgrade();
+
+  const handleLogout = () => {
+    disconnect();
+    signOut();
+  };
 
   useEffect(() => {
     const unlistenCapture = listen("capture-screen-shortcut", () => {
@@ -46,7 +55,7 @@ export default function App() {
   };
 
   return (
-    <>
+    <AuthGate>
       <SignedIn>
         <EnsureConvexUser />
         <Overlay
@@ -58,6 +67,7 @@ export default function App() {
           onRestorePrompt={restoreDefaultPrompt}
           onChangeLanguage={changeLanguage}
           onToggleScreenPanel={toggleScreenPanel}
+          onLogout={handleLogout}
         />
       </SignedIn>
       <SignedOut>
@@ -67,6 +77,6 @@ export default function App() {
           </div>
         </div>
       </SignedOut>
-    </>
+    </AuthGate>
   );
 }

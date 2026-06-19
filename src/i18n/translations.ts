@@ -103,7 +103,14 @@ export type TranslationKey =
   | "subPastDue"
   | "subPaused"
   | "subStatus"
-  | "closeModal";
+  | "closeModal"
+  | "authLoading"
+  | "authError"
+  | "authErrorDesc"
+  | "btnRetry"
+  | "btnLogout"
+  | "upgradeSuccess"
+  | "upgradeFallback";
 
 const translations: Record<Language, Record<TranslationKey, string>> = {
   es: {
@@ -212,6 +219,13 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     subPaused: "Pausada",
     subStatus: "Estado de suscripción",
     closeModal: "Cerrar",
+    authLoading: "Cargando...",
+    authError: "Error de conexión",
+    authErrorDesc: "No se pudo conectar con el servicio de autenticación. Verifica tu conexión e inténtalo de nuevo.",
+    btnRetry: "Reintentar",
+    btnLogout: "Cerrar sesión",
+    upgradeSuccess: "¡Suscripción activada! Tu plan {plan} está listo.",
+    upgradeFallback: "Si completaste tu compra y no ves los cambios, cierra sesión y vuelve a iniciar sesión.",
   },
   en: {
     statusDisconnected: "Disconnected",
@@ -319,6 +333,13 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     subPaused: "Paused",
     subStatus: "Subscription status",
     closeModal: "Close",
+    authLoading: "Loading...",
+    authError: "Connection error",
+    authErrorDesc: "Could not connect to the authentication service. Check your connection and try again.",
+    btnRetry: "Retry",
+    btnLogout: "Sign out",
+    upgradeSuccess: "Subscription activated! Your {plan} plan is ready.",
+    upgradeFallback: "If you completed your purchase and don't see changes, sign out and sign back in.",
   },
 };
 

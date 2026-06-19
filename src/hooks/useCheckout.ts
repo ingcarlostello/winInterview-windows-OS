@@ -3,6 +3,7 @@ import { useAction } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { invoke } from "@tauri-apps/api/core";
 import { initializePaddle, type Paddle } from "@paddle/paddle-js";
+import { useInterviewStore } from "../stores/interview";
 
 const PADDLE_CLIENT_TOKEN =
   import.meta.env.VITE_PADDLE_CLIENT_TOKEN ||
@@ -52,6 +53,7 @@ export function useCheckout() {
           },
         });
 
+        useInterviewStore.getState().setPendingUpgrade(planId);
         setState("success");
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);

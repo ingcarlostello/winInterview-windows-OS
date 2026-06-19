@@ -30,12 +30,12 @@ export interface SettingsSlice {
 }
 
 export const createSettingsSlice: StateCreator<RootState, [], [], SettingsSlice> = (set, get) => ({
-  language: "es",
+  language: "en",
   theme: "dark",
   customPrompts: { es: "", en: "" },
   showPromptEditor: false,
   ghostMode: false,
-  contentProtected: true,
+  contentProtected: false,
   alwaysOnTop: true,
 
   setLanguage: (language) => set({ language }),

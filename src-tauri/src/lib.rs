@@ -9,7 +9,7 @@ use xcap::Monitor;
 
 /// Thread-safe flags shared between shortcut handlers and commands.
 static GHOST_MODE: AtomicBool = AtomicBool::new(false);
-static CONTENT_PROTECTED: AtomicBool = AtomicBool::new(true);
+static CONTENT_PROTECTED: AtomicBool = AtomicBool::new(false);
 static SHORTCUTS_ENABLED: AtomicBool = AtomicBool::new(false);
 static INVISIBLE_MODE_ENABLED: AtomicBool = AtomicBool::new(false);
 static GHOST_MODE_ENABLED: AtomicBool = AtomicBool::new(false);
@@ -107,6 +107,16 @@ fn toggle_content_protected(window: tauri::Window) -> bool {
     new_state
 }
 
+/// Set content protection to an explicit value (no toggle).
+/// Used by the frontend to sync Rust state with the user's plan
+/// (e.g. disable for free/lite/pro, enable for ultra).
+#[tauri::command]
+fn set_content_protected(window: tauri::Window, enabled: bool) {
+    CONTENT_PROTECTED.store(enabled, Ordering::SeqCst);
+    let _ = window.set_content_protected(enabled);
+    let _ = window.emit("content-protected-changed", enabled);
+}
+
 #[tauri::command]
 fn set_window_expanded(window: tauri::Window, expanded: bool) -> Result<(), String> {
     let width = if expanded { 1400.0 } else { 730.0 };
@@ -149,10 +159,12 @@ pub fn run() {
                 )?;
             }
 
-            // ── Screen capture exclusion (on by default) ────────────────
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.set_content_protected(true);
-            }
+            // ── Screen capture exclusion ───────────────────────────────
+            // Content protection is OFF by default. It is enabled per-plan
+            // via the `set_content_protected` command when the user's plan
+            // includes `invisible_mode` (Ultra only).
+            // (Removed the unconditional set_content_protected(true) here so
+            //  free/lite/pro users do not get invisible mode on startup.)
 
             // ── Ctrl+Shift+Space → toggle always-on-top ─────────────────
             let handle = app.handle().clone();
@@ -231,6 +243,7 @@ pub fn run() {
             capture_screen,
             toggle_always_on_top,
             toggle_content_protected,
+            set_content_protected,
             set_window_expanded,
             get_stealth_state,
             update_plan_permissions,

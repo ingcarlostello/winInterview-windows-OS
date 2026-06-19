@@ -163,17 +163,12 @@ export function useWebSocket() {
               invisibleModeEnabled: planInfo.features.invisible_mode,
               ghostModeEnabled: planInfo.features.ghost_mode,
             }).catch((err) => console.error("[WS] Failed to update plan permissions:", err));
-            if (!planInfo.features.invisible_mode) {
-              const currentProtected = useInterviewStore.getState().contentProtected;
-              if (currentProtected) {
-                invoke<boolean>("toggle_content_protected")
-                  .then((newState) => {
-                    useInterviewStore.getState().setContentProtected(newState);
-                  })
-                  .catch(() => {
-                    useInterviewStore.getState().setContentProtected(false);
-                  });
-              }
+            if (planInfo.features.invisible_mode) {
+              invoke("set_content_protected", { enabled: true }).catch(() => {});
+              useInterviewStore.getState().setContentProtected(true);
+            } else {
+              invoke("set_content_protected", { enabled: false }).catch(() => {});
+              useInterviewStore.getState().setContentProtected(false);
             }
             break;
           }
@@ -222,8 +217,6 @@ export function useWebSocket() {
   useEffect(() => {
     mountedRef.current = true;
 
-    connect();
-
     return () => {
       mountedRef.current = false;
       if (reconnectTimerRef.current) {
@@ -233,7 +226,7 @@ export function useWebSocket() {
       wsRef.current?.close();
       wsRef.current = null;
     };
-  }, [connect]);
+  }, []);
 
   const send = useCallback((command: string) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {

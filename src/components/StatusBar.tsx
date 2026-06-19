@@ -3,6 +3,7 @@ import {
   Crown,
   Eye,
   Layers,
+  LogOut,
   Monitor,
   Minus,
   Pin,
@@ -97,11 +98,13 @@ const statusConfig: Record<Status, StatusStyle> = {
 interface StatusBarProps {
   onChangeLanguage?: (language: string) => void;
   onToggleScreenPanel?: () => void;
+  onLogout?: () => void;
 }
 
 export default function StatusBar({
   onChangeLanguage,
   onToggleScreenPanel,
+  onLogout,
 }: StatusBarProps) {
   const status = useInterviewStore((s) => s.status);
   const ghostMode = useInterviewStore((s) => s.ghostMode);
@@ -222,6 +225,16 @@ export default function StatusBar({
             <Crown size={12} />
             <span className="text-[10px] font-medium">{planName}</span>
           </button>
+
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              className="flex items-center justify-center w-6 h-6 rounded-full text-white/40 hover:text-white/80 hover:bg-white/10 transition-colors cursor-pointer"
+              title={t("btnLogout")}
+            >
+              <LogOut size={12} />
+            </button>
+          )}
         </div>
       </div>
 
