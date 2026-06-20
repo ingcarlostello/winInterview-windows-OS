@@ -1,27 +1,32 @@
 import { useEffect } from "react";
 import { useQuery } from "convex/react";
+import { invoke } from "@tauri-apps/api/core";
 import { api } from "../../convex/_generated/api";
 import { useInterviewStore } from "../stores/interview";
 import type { PlanInfo } from "../stores/slices/planSlice";
 
 export function usePlanSync() {
   const convexPlanInfo = useQuery(api.users.getCurrentUserPlanInfo);
-  const setPlanInfo = useInterviewStore((s) => s.setPlanInfo);
-  const syncQuotasFromConvex = useInterviewStore((s) => s.syncQuotasFromConvex);
-  const currentPlanInfo = useInterviewStore((s) => s.planInfo);
+  const mergePlanInfo = useInterviewStore((s) => s.mergePlanInfo);
 
   useEffect(() => {
     if (!convexPlanInfo) return;
 
-    if (!currentPlanInfo) {
-      setPlanInfo(convexPlanInfo as unknown as PlanInfo);
-      return;
-    }
+    const info = convexPlanInfo as unknown as PlanInfo;
 
-    // Always keep quotas in sync with Convex, but only adopt more restrictive values
-    // so we don't overwrite in-memory consumption that hasn't been flushed yet.
-    syncQuotasFromConvex(
-      (convexPlanInfo as unknown as PlanInfo).quotas
-    );
-  }, [convexPlanInfo, currentPlanInfo, setPlanInfo, syncQuotasFromConvex]);
+    const prevPlanInfo = useInterviewStore.getState().planInfo;
+    const prevInvisibleMode = prevPlanInfo?.features.invisible_mode ?? null;
+
+    mergePlanInfo(info);
+
+    if (prevInvisibleMode !== info.features.invisible_mode) {
+      if (info.features.invisible_mode) {
+        invoke("set_content_protected", { enabled: true }).catch(() => {});
+        useInterviewStore.getState().setContentProtected(true);
+      } else {
+        invoke("set_content_protected", { enabled: false }).catch(() => {});
+        useInterviewStore.getState().setContentProtected(false);
+      }
+    }
+  }, [convexPlanInfo, mergePlanInfo]);
 }

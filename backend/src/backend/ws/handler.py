@@ -41,16 +41,22 @@ async def websocket_endpoint(
 
     session_id = str(uuid.uuid4())[:8]
     initial_language = websocket.query_params.get("lang", "es")
-    custom_prompt = websocket.query_params.get("prompt")
+    if initial_language not in ("es", "en"):
+        initial_language = "es"
 
     convex_client = ConvexClient()
     plan_id = PlanId.LITE
     remaining = None
+    custom_prompt: str | None = None
     try:
-        result = await convex_client.get_user_and_quota(clerk_id)
-        if result:
-            plan_id, remaining = result
+        user_data = await convex_client.get_user_and_quota(clerk_id)
+        if user_data:
+            plan_id = user_data.plan_id
+            remaining = user_data.remaining
+            custom_prompt = user_data.prompts.get(initial_language)
             logger.info(f"Session {session_id} loaded plan {plan_id.value} from Convex")
+        else:
+            logger.warning(f"Session {session_id} could not load user data from Convex")
     except Exception as e:
         logger.error(f"Failed to load plan from Convex for session {session_id}: {e}")
         plan_id_str = websocket.query_params.get("plan", "lite")

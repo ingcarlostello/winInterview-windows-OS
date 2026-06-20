@@ -13,6 +13,7 @@ import type * as constants from "../constants.js";
 import type * as http from "../http.js";
 import type * as list_users from "../list_users.js";
 import type * as paddle from "../paddle.js";
+import type * as prompts from "../prompts.js";
 import type * as quotas from "../quotas.js";
 import type * as users from "../users.js";
 import type * as webhooks from "../webhooks.js";
@@ -29,6 +30,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   list_users: typeof list_users;
   paddle: typeof paddle;
+  prompts: typeof prompts;
   quotas: typeof quotas;
   users: typeof users;
   webhooks: typeof webhooks;

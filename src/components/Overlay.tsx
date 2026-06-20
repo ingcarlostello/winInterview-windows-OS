@@ -10,6 +10,7 @@ import Controls from "./Controls";
 import QuestionCounter from "./QuestionCounter";
 import PromptEditor from "./PromptEditor";
 import ScreenPanel from "./ScreenPanel";
+import Toast from "./Toast";
 
 interface OverlayProps {
   onPause: () => void;
@@ -20,6 +21,7 @@ interface OverlayProps {
   onRestorePrompt: () => void;
   onChangeLanguage: (language: string) => void;
   onToggleScreenPanel: () => void;
+  onLogout: () => void;
 }
 
 export default function Overlay({
@@ -31,6 +33,7 @@ export default function Overlay({
   onRestorePrompt,
   onChangeLanguage,
   onToggleScreenPanel,
+  onLogout,
 }: OverlayProps) {
   const status = useInterviewStore((s) => s.status);
   const ghostMode = useInterviewStore((s) => s.ghostMode);
@@ -88,11 +91,8 @@ export default function Overlay({
     if (!canUseInvisibleMode) {
       const currentProtected = useInterviewStore.getState().contentProtected;
       if (currentProtected) {
-        invoke<boolean>("toggle_content_protected").then((newState) => {
-          setContentProtected(newState);
-        }).catch(() => {
-          setContentProtected(false);
-        });
+        setContentProtected(false);
+        invoke("set_content_protected", { enabled: false }).catch(() => {});
       }
     }
   }, [canUseInvisibleMode, setContentProtected]);
@@ -125,6 +125,7 @@ export default function Overlay({
         <StatusBar
           onChangeLanguage={onChangeLanguage}
           onToggleScreenPanel={onToggleScreenPanel}
+          onLogout={onLogout}
         />
         <div className="border-b border-white/10" />
         <Controls
@@ -137,7 +138,6 @@ export default function Overlay({
         <PromptEditor
           onSave={onSavePrompt}
           onRestore={onRestorePrompt}
-          onConnect={onConnect}
         />
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden pt-2">
           <Transcription />
@@ -148,6 +148,7 @@ export default function Overlay({
       <div className={`transition-all duration-500 ease-slide overflow-hidden ${screenPanelOpen ? "flex-1 min-w-0" : "w-0 flex-shrink-0"}`}>
         <ScreenPanel />
       </div>
+      <Toast />
     </div>
   );
 }

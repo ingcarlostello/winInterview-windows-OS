@@ -49,9 +49,10 @@ async def analyze_screens_ws(websocket: WebSocket):
     plan_id = PlanId.LITE
     remaining = None
     try:
-        result = await convex_client.get_user_and_quota(clerk_id)
-        if result:
-            plan_id, remaining = result
+        user_data = await convex_client.get_user_and_quota(clerk_id)
+        if user_data:
+            plan_id = user_data.plan_id
+            remaining = user_data.remaining
             logger.info(f"Screen analysis {session_id} loaded plan {plan_id.value} from Convex")
     except Exception as e:
         logger.error(f"Failed to load plan from Convex for screen analysis {session_id}: {e}")

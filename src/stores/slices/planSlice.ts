@@ -25,10 +25,16 @@ export interface PlanInfo {
   quotas: Record<string, QuotaInfo>;
 }
 
+export interface PendingUpgrade {
+  planId: PlanId;
+  startedAt: number;
+}
+
 export interface PlanSlice {
   planInfo: PlanInfo | null;
   liveTranscriptionRemaining: number | null;
   countdownActive: boolean;
+  pendingUpgrade: PendingUpgrade | null;
   setPlanInfo: (info: PlanInfo) => void;
   mergePlanInfo: (info: PlanInfo) => void;
   updateQuota: (quotaKey: string, info: QuotaInfo) => void;
@@ -36,6 +42,8 @@ export interface PlanSlice {
   syncQuotasFromConvex: (quotas: Record<string, QuotaInfo>) => void;
   setLiveTranscriptionRemaining: (value: number | null) => void;
   setCountdownActive: (active: boolean) => void;
+  setPendingUpgrade: (planId: PlanId) => void;
+  clearPendingUpgrade: () => void;
   hasFeature: (feature: keyof FeatureFlags) => boolean;
   getQuota: (quotaKey: string) => QuotaInfo | null;
 }
@@ -65,6 +73,7 @@ export const createPlanSlice: StateCreator<RootState, [], [], PlanSlice> = (
   planInfo: null,
   liveTranscriptionRemaining: null,
   countdownActive: false,
+  pendingUpgrade: null,
 
   setPlanInfo: (info) => set({ planInfo: info }),
 
@@ -183,6 +192,11 @@ export const createPlanSlice: StateCreator<RootState, [], [], PlanSlice> = (
   setLiveTranscriptionRemaining: (value) => set({ liveTranscriptionRemaining: value }),
 
   setCountdownActive: (active) => set({ countdownActive: active }),
+
+  setPendingUpgrade: (planId) =>
+    set({ pendingUpgrade: { planId, startedAt: Date.now() } }),
+
+  clearPendingUpgrade: () => set({ pendingUpgrade: null }),
 
   hasFeature: (feature) => {
     const plan = get().planInfo ?? DEFAULT_PLAN_INFO;

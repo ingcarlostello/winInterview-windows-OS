@@ -4,12 +4,14 @@ import { createSessionSlice, type SessionSlice } from "./slices/sessionSlice";
 import { createSettingsSlice, type SettingsSlice } from "./slices/settingsSlice";
 import { createScreenSlice, type ScreenSlice } from "./slices/screenSlice";
 import { createPlanSlice, type PlanSlice } from "./slices/planSlice";
+import { createUISlice, type UISlice } from "./slices/uiSlice";
 
 export type { Status } from "./slices/sessionSlice";
 export type { Language, Theme } from "./slices/settingsSlice";
-export type { PlanId, FeatureFlags, QuotaInfo, PlanInfo } from "./slices/planSlice";
+export type { PlanId, FeatureFlags, QuotaInfo, PlanInfo, PendingUpgrade } from "./slices/planSlice";
+export type { ToastType, ToastState } from "./slices/uiSlice";
 
-export interface RootState extends SessionSlice, SettingsSlice, ScreenSlice, PlanSlice {
+export interface RootState extends SessionSlice, SettingsSlice, ScreenSlice, PlanSlice, UISlice {
   reset: () => void;
 }
 
@@ -20,11 +22,12 @@ export const useInterviewStore = create<RootState>()(
       ...createSettingsSlice(...a),
       ...createScreenSlice(...a),
       ...createPlanSlice(...a),
+      ...createUISlice(...a),
       reset: () => {
         const set = a[0];
         set({
           status: "idle",
-          language: "es",
+          language: "en",
           transcription: "",
           responseChunks: [],
           error: null,
@@ -33,6 +36,7 @@ export const useInterviewStore = create<RootState>()(
           liveTranscriptionRemaining: null,
           countdownActive: false,
           sessionStartTime: null,
+          toast: null,
         });
       },
     }),
@@ -42,12 +46,22 @@ export const useInterviewStore = create<RootState>()(
         customPrompts: state.customPrompts,
         language: state.language,
         theme: state.theme,
+        pendingUpgrade: state.pendingUpgrade,
       }),
       migrate: (persistedState: unknown) => {
-        if (persistedState && typeof persistedState === "object" && "theme" in persistedState) {
-          const theme = (persistedState as { theme: unknown }).theme;
-          if (theme !== "dark" && theme !== "glass") {
-            (persistedState as { theme: string }).theme = "dark";
+        if (persistedState && typeof persistedState === "object") {
+          const s = persistedState as { theme?: unknown; language?: unknown };
+          if ("theme" in s) {
+            if (s.theme !== "dark" && s.theme !== "glass") {
+              s.theme = "dark";
+            }
+          }
+          if ("language" in s) {
+            if (s.language !== "en" && s.language !== "es") {
+              s.language = "en";
+            } else {
+              s.language = "en";
+            }
           }
         }
         return persistedState as never;

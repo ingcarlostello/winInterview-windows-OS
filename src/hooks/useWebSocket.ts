@@ -1,8 +1,11 @@
 import { useEffect, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useMutation } from "convex/react";
+import { api } from "../../convex/_generated/api";
 import { useInterviewStore } from "../stores/interview";
 import type { Status } from "../stores/interview";
 import type { PlanInfo } from "../stores/slices/planSlice";
+import type { Language } from "../stores/slices/settingsSlice";
 import { WS_MESSAGE_TYPE, WS_STATUS } from "../constants/ws";
 import { useAuth } from "@clerk/clerk-react";
 
@@ -15,6 +18,8 @@ interface WSMessage {
 
 export function useWebSocket() {
   const { getToken, isLoaded, isSignedIn } = useAuth();
+  const upsertPrompt = useMutation(api.prompts.upsertMyPrompt);
+  const clearPrompt = useMutation(api.prompts.clearMyPrompt);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
@@ -67,11 +72,9 @@ export function useWebSocket() {
     try {
       const token = await getToken();
       const language = useInterviewStore.getState().language;
-      const customPrompt = useInterviewStore.getState().getCustomPrompt();
       const planId = useInterviewStore.getState().planInfo?.plan_id ?? "free";
-      const promptParam = customPrompt.trim() ? `&prompt=${encodeURIComponent(customPrompt.trim())}` : "";
-      
-      const ws = new WebSocket(`${WS_BASE}?lang=${language}&plan=${planId}&token=${token}${promptParam}`);
+
+      const ws = new WebSocket(`${WS_BASE}?lang=${language}&plan=${planId}&token=${token}`);
       wsRef.current = ws;
 
     ws.onopen = () => {
@@ -163,17 +166,12 @@ export function useWebSocket() {
               invisibleModeEnabled: planInfo.features.invisible_mode,
               ghostModeEnabled: planInfo.features.ghost_mode,
             }).catch((err) => console.error("[WS] Failed to update plan permissions:", err));
-            if (!planInfo.features.invisible_mode) {
-              const currentProtected = useInterviewStore.getState().contentProtected;
-              if (currentProtected) {
-                invoke<boolean>("toggle_content_protected")
-                  .then((newState) => {
-                    useInterviewStore.getState().setContentProtected(newState);
-                  })
-                  .catch(() => {
-                    useInterviewStore.getState().setContentProtected(false);
-                  });
-              }
+            if (planInfo.features.invisible_mode) {
+              invoke("set_content_protected", { enabled: true }).catch(() => {});
+              useInterviewStore.getState().setContentProtected(true);
+            } else {
+              invoke("set_content_protected", { enabled: false }).catch(() => {});
+              useInterviewStore.getState().setContentProtected(false);
             }
             break;
           }
@@ -222,8 +220,6 @@ export function useWebSocket() {
   useEffect(() => {
     mountedRef.current = true;
 
-    connect();
-
     return () => {
       mountedRef.current = false;
       if (reconnectTimerRef.current) {
@@ -233,7 +229,7 @@ export function useWebSocket() {
       wsRef.current?.close();
       wsRef.current = null;
     };
-  }, [connect]);
+  }, []);
 
   const send = useCallback((command: string) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -246,17 +242,24 @@ export function useWebSocket() {
 
   const setPrompt = useCallback((prompt: string) => {
     console.log("[WS] setPrompt called with:", prompt.substring(0, 50) + "...");
-    const language = useInterviewStore.getState().language;
+    const language = useInterviewStore.getState().language as Language;
     useInterviewStore.getState().setCustomPrompt(language, prompt);
-  }, []);
+    void upsertPrompt({ lang: language, promptText: prompt }).catch((err) =>
+      console.error("[WS] Failed to persist prompt to Convex:", err),
+    );
+    send(`set_prompt:${prompt}`);
+  }, [send, upsertPrompt]);
 
   const restoreDefaultPrompt = useCallback(() => {
     console.log("[WS] restoreDefaultPrompt called");
     send("clear_prompt");
-    const language = useInterviewStore.getState().language;
+    const language = useInterviewStore.getState().language as Language;
     useInterviewStore.getState().clearCustomPrompt(language);
+    void clearPrompt({ lang: language }).catch((err) =>
+      console.error("[WS] Failed to clear prompt in Convex:", err),
+    );
     console.log("[WS] Zustand store cleared for language:", language);
-  }, [send]);
+  }, [send, clearPrompt]);
 
   const changeLanguage = useCallback((language: string) => {
     send(`set_language:${language}`);
