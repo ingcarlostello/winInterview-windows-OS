@@ -8,6 +8,7 @@ import { SignedIn, SignedOut, SignIn, useClerk } from "@clerk/clerk-react";
 import AuthGate from "./components/AuthGate";
 import EnsureConvexUser from "./components/EnsureConvexUser";
 import { usePlanSync } from "./hooks/usePlanSync";
+import { usePromptSync } from "./hooks/usePromptSync";
 import { useScreenCapture } from "./hooks/useScreenCapture";
 import { useTranscriptionCountdown } from "./hooks/useTranscriptionCountdown";
 import { usePendingUpgrade } from "./hooks/usePendingUpgrade";
@@ -16,6 +17,7 @@ export default function App() {
   const { send, disconnect, connect, setPrompt, restoreDefaultPrompt, changeLanguage } = useWebSocket();
   const { signOut } = useClerk();
   usePlanSync();
+  usePromptSync();
   const { captureScreen } = useScreenCapture();
   useTranscriptionCountdown();
   usePendingUpgrade();

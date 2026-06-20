@@ -48,6 +48,18 @@ export const getUserAndQuotaByClerkId = internalQuery({
 
     const limits = PLAN_QUOTAS[planId] ?? PLAN_QUOTAS.free;
 
+    const promptRows = await ctx.db
+      .query("prompts")
+      .withIndex("by_user_lang", (q) => q.eq("userId", user._id))
+      .take(2);
+
+    const prompts: Record<string, string> = {};
+    for (const row of promptRows) {
+      if (row.lang === "es" || row.lang === "en") {
+        prompts[row.lang] = row.promptText;
+      }
+    }
+
     return {
       clerkId: user.clerkId,
       planId,
@@ -64,6 +76,7 @@ export const getUserAndQuotaByClerkId = internalQuery({
         captures: limits.captures,
         analyses: limits.analyses,
       },
+      prompts,
     };
   },
 });

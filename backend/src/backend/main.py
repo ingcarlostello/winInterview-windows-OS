@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.dependencies import get_connection_manager
-from backend.routers import prompts, screens
+from backend.routers import screens
 from backend.ws.handler import websocket_endpoint
 
 logging.basicConfig(
@@ -28,7 +28,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(prompts.router)
 app.include_router(screens.router)
 
 app.websocket("/ws")(websocket_endpoint)

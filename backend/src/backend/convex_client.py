@@ -1,5 +1,6 @@
 import logging
 import os
+from dataclasses import dataclass, field
 from typing import Any
 
 import aiohttp
@@ -12,6 +13,15 @@ logger = logging.getLogger(__name__)
 def _resolve_convex_site_url() -> str:
     convex_url = os.environ.get("VITE_CONVEX_URL", "")
     return convex_url.replace(".cloud", ".site")
+
+
+@dataclass
+class ConvexUserData:
+    """User plan, quota remaining, and custom prompts loaded from Convex."""
+
+    plan_id: PlanId
+    remaining: dict[Quota, int]
+    prompts: dict[str, str] = field(default_factory=dict)
 
 
 class ConvexClient:
@@ -29,8 +39,8 @@ class ConvexClient:
 
     async def get_user_and_quota(
         self, clerk_id: str
-    ) -> tuple[PlanId, dict[Quota, int]] | None:
-        """Fetch the user's plan and current quota remaining from Convex."""
+    ) -> ConvexUserData | None:
+        """Fetch the user's plan, quota remaining, and prompts from Convex."""
         if not self.site_url or not self.backend_key:
             logger.warning("Convex site URL or backend key not configured")
             return None
@@ -73,7 +83,14 @@ class ConvexClient:
             Quota.SCREEN_ANALYSES: int(quota_data.get("analysesRemaining", 0)),
         }
 
-        return plan_id, remaining
+        prompts_raw = data.get("prompts") or {}
+        prompts: dict[str, str] = {}
+        for lang in ("es", "en"):
+            value = prompts_raw.get(lang)
+            if isinstance(value, str) and value.strip():
+                prompts[lang] = value
+
+        return ConvexUserData(plan_id=plan_id, remaining=remaining, prompts=prompts)
 
     async def decrement_quota(
         self, clerk_id: str, quota_type: str, amount: int

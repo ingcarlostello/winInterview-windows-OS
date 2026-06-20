@@ -6,7 +6,7 @@ from fastapi import WebSocket
 
 from backend.audio.service import AudioStreamingService
 from backend.context import ConversationHistory
-from backend.llm.prompt import delete_custom_prompt, get_system_prompt, save_custom_prompt
+from backend.llm.prompt import get_system_prompt
 from backend.llm.protocol import LLMService
 from backend.llm.vision import VisionLLMService
 from backend.plan_gate import FeatureBlockedError, PlanGate, QuotaExceededError
@@ -278,7 +278,6 @@ class AgentSession:
         custom_prompt = cmd.payload.strip()
         if custom_prompt:
             logger.info(f"Received set_prompt for session {self.session_id}: {custom_prompt[:100]}...")
-            save_custom_prompt(self.language, custom_prompt)
             self.history.set_system_prompt(custom_prompt)
             logger.info("Updated conversation_history[0] with custom prompt")
             await self._send_status(WsStatus.PROMPT_SAVED)
@@ -291,7 +290,6 @@ class AgentSession:
             await self._send_status(WsStatus.FEATURE_BLOCKED)
             return
         logger.info(f"Received clear_prompt for session {self.session_id}")
-        delete_custom_prompt(self.language)
         self.history.set_system_prompt(get_system_prompt(self.language))
         await self._send_status(WsStatus.PROMPT_CLEARED)
 

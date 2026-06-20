@@ -138,7 +138,6 @@ export default function Overlay({
         <PromptEditor
           onSave={onSavePrompt}
           onRestore={onRestorePrompt}
-          onConnect={onConnect}
         />
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden pt-2">
           <Transcription />
