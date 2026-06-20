@@ -68,6 +68,7 @@ async def analyze_screens_ws(websocket: WebSocket):
         data = await websocket.receive_json()
         images = data.get("images", [])
         prompt = data.get("prompt", "")
+        lang = websocket.query_params.get("lang", "es")
 
         if not images:
             await websocket.send_json({
@@ -103,7 +104,7 @@ async def analyze_screens_ws(websocket: WebSocket):
         })
 
         async for chunk in vision_service.analyze_multiple_screens(
-            images, prompt, session_id
+            images, prompt, session_id, language=lang
         ):
             await websocket.send_json({
                 "type": WsMessageType.CHUNK,

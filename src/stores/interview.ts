@@ -6,7 +6,7 @@ import { createScreenSlice, type ScreenSlice } from "./slices/screenSlice";
 import { createPlanSlice, type PlanSlice } from "./slices/planSlice";
 import { createUISlice, type UISlice } from "./slices/uiSlice";
 
-export type { Status } from "./slices/sessionSlice";
+export type { Status, QAEntry } from "./slices/sessionSlice";
 export type { Language, Theme } from "./slices/settingsSlice";
 export type { PlanId, FeatureFlags, QuotaInfo, PlanInfo, PendingUpgrade } from "./slices/planSlice";
 export type { ToastType, ToastState } from "./slices/uiSlice";
@@ -30,6 +30,7 @@ export const useInterviewStore = create<RootState>()(
           language: "en",
           transcription: "",
           responseChunks: [],
+          qaHistory: [],
           error: null,
           questionsAnswered: 0,
           planInfo: null,
