@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
@@ -7,39 +8,101 @@ import { useInterviewStore } from "../stores/interview";
 import { useTranslation } from "../hooks/useTranslation";
 import type { Status } from "../stores/interview";
 
-function getBadgeKey(status: Status, hasContent: boolean) {
-  if (hasContent && status === "responding") return "badgeResponding";
+function getBadgeKey(status: Status, hasCurrentContent: boolean) {
+  if (hasCurrentContent && status === "responding") return "badgeResponding";
   if (status === "thinking") return "badgeThinking";
   if (status === "listening") return "badgeListening";
   return "badgeReady";
 }
 
-function getBadgeColor(status: Status, hasContent: boolean) {
-  if (hasContent && status === "responding") return "bg-accent/20 text-accent";
+function getBadgeColor(status: Status, hasCurrentContent: boolean) {
+  if (hasCurrentContent && status === "responding") return "bg-accent/20 text-accent";
   if (status === "thinking") return "bg-yellow-500/20 text-yellow-400";
   if (status === "listening") return "bg-green-500/20 text-green-400";
   return "bg-white/5 text-white/30";
 }
 
+function MarkdownBlock({ children }: { children: string }) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        table: ({ children: tc }) => (
+          <table className="w-full border-collapse border border-accent/20 rounded mt-2 mb-2">
+            {tc}
+          </table>
+        ),
+        thead: ({ children: tc }) => (
+          <thead className="bg-accent-soft-2">{tc}</thead>
+        ),
+        tbody: ({ children: tc }) => <tbody>{tc}</tbody>,
+        tr: ({ children: tc }) => (
+          <tr className="border-b border-accent/10">{tc}</tr>
+        ),
+        th: ({ children: tc }) => (
+          <th className="border border-accent/20 px-3 py-1.5 text-left font-semibold text-accent-hover">
+            {tc}
+          </th>
+        ),
+        td: ({ children: tc }) => (
+          <td className="border border-accent/20 px-3 py-1.5">{tc}</td>
+        ),
+        code: ({ className, children, ...props }) => {
+          const match = /language-(\w+)/.exec(className || "");
+          const { node, ...rest } = props;
+          void node;
+          return match ? (
+            <SyntaxHighlighter
+              style={vscDarkPlus}
+              language={match[1]}
+              PreTag="div"
+            >
+              {String(children).replace(/\n$/, "")}
+            </SyntaxHighlighter>
+          ) : (
+            <code className={className} {...rest}>
+              {children}
+            </code>
+          );
+        },
+      }}
+    >
+      {children}
+    </ReactMarkdown>
+  );
+}
+
 export default function Response() {
   const responseChunks = useInterviewStore((s) => s.responseChunks);
+  const qaHistory = useInterviewStore((s) => s.qaHistory);
   const status = useInterviewStore((s) => s.status);
   const { t } = useTranslation();
+  const scrollRef = useRef<HTMLDivElement | null>(null);
 
-  const fullText = responseChunks.join("");
-  const hasContent = fullText.length > 0;
+  const currentResponse = responseChunks.join("");
+  const hasCurrentContent = currentResponse.length > 0;
+  const hasHistory = qaHistory.length > 0;
   const isThinking = status === "thinking";
 
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    if (atBottom) {
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [responseChunks]);
+
   const handleCopy = async () => {
-    if (fullText) {
-      await navigator.clipboard.writeText(fullText);
+    if (currentResponse) {
+      await navigator.clipboard.writeText(currentResponse);
     }
   };
 
-  const textToRender = status === "responding" ? `${fullText}▎` : fullText;
+  const textToRender = status === "responding" ? `${currentResponse}▎` : currentResponse;
 
-  const badgeKey = getBadgeKey(status, hasContent);
-  const badgeColor = getBadgeColor(status, hasContent);
+  const badgeKey = getBadgeKey(status, hasCurrentContent);
+  const badgeColor = getBadgeColor(status, hasCurrentContent);
 
   return (
     <div className="px-3 pb-2 flex-1 flex flex-col min-h-0">
@@ -59,7 +122,7 @@ export default function Response() {
           <span className={`text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-full font-semibold ${badgeColor}`}>
             {t(badgeKey)}
           </span>
-          {hasContent && (
+          {hasCurrentContent && (
             <button
               type="button"
               onClick={handleCopy}
@@ -74,8 +137,11 @@ export default function Response() {
           )}
         </div>
       </div>
-      <div className="border border-accent-border rounded-lg bg-black/30 px-3 py-2 flex-1 overflow-y-auto scrollbar-thin min-h-[80px]">
-        {isThinking ? (
+      <div
+        ref={scrollRef}
+        className="border border-accent-border rounded-lg bg-black/30 px-3 py-2 flex-1 overflow-y-auto scrollbar-thin min-h-[80px]"
+      >
+        {isThinking && !hasHistory ? (
           <div className="flex items-center gap-2 text-accent/60 text-sm">
             <span className="flex gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-accent/60 dot-pulse-anim" style={{ animationDelay: "0ms" }} />
@@ -84,53 +150,31 @@ export default function Response() {
             </span>
             <span className="text-xs">{t("generatingResponse")}</span>
           </div>
-        ) : hasContent ? (
+        ) : hasHistory || hasCurrentContent ? (
           <div className="text-accent text-sm leading-relaxed prose prose-invert max-w-none">
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              components={{
-                table: ({ children }) => (
-                  <table className="w-full border-collapse border border-accent/20 rounded mt-2 mb-2">
-                    {children}
-                  </table>
-                ),
-                thead: ({ children }) => (
-                  <thead className="bg-accent-soft-2">{children}</thead>
-                ),
-                tbody: ({ children }) => <tbody>{children}</tbody>,
-                tr: ({ children }) => (
-                  <tr className="border-b border-accent/10">{children}</tr>
-                ),
-                th: ({ children }) => (
-                  <th className="border border-accent/20 px-3 py-1.5 text-left font-semibold text-accent-hover">
-                    {children}
-                  </th>
-                ),
-                td: ({ children }) => (
-                  <td className="border border-accent/20 px-3 py-1.5">{children}</td>
-                ),
-                code: ({ className, children, ...props }) => {
-                  const match = /language-(\w+)/.exec(className || "");
-                  const { node, ...rest } = props;
-                  void node;
-                  return match ? (
-                    <SyntaxHighlighter
-                      style={vscDarkPlus}
-                      language={match[1]}
-                      PreTag="div"
-                    >
-                      {String(children).replace(/\n$/, "")}
-                    </SyntaxHighlighter>
-                  ) : (
-                    <code className={className} {...rest}>
-                      {children}
-                    </code>
-                  );
-                },
-              }}
-            >
-              {textToRender}
-            </ReactMarkdown>
+            {qaHistory.map((entry, i) => (
+              <div key={i}>
+                <MarkdownBlock>
+                  {`**Q:** ${entry.question}\n\n${entry.answer}`}
+                </MarkdownBlock>
+                <hr className="border-accent/10 my-3" />
+              </div>
+            ))}
+            {hasCurrentContent && (
+              <MarkdownBlock>
+                {textToRender}
+              </MarkdownBlock>
+            )}
+            {isThinking && hasHistory && (
+              <div className="flex items-center gap-2 text-accent/60 text-sm mt-2">
+                <span className="flex gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-accent/60 dot-pulse-anim" style={{ animationDelay: "0ms" }} />
+                  <span className="w-1.5 h-1.5 rounded-full bg-accent/60 dot-pulse-anim" style={{ animationDelay: "200ms" }} />
+                  <span className="w-1.5 h-1.5 rounded-full bg-accent/60 dot-pulse-anim" style={{ animationDelay: "400ms" }} />
+                </span>
+                <span className="text-xs">{t("generatingResponse")}</span>
+              </div>
+            )}
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center gap-2 py-4">

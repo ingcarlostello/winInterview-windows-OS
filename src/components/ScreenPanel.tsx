@@ -66,7 +66,8 @@ export default function ScreenPanel() {
     const effectivePrompt = (canUseCustomPrompts ? screenPrompt : "").trim() || t("promptPlaceholder");
 
     const planId = useInterviewStore.getState().planInfo?.plan_id ?? "free";
-    const ws = new WebSocket(`${WS_ANALYZE_URL}?plan=${planId}&token=${token}`);
+    const language = useInterviewStore.getState().language;
+    const ws = new WebSocket(`${WS_ANALYZE_URL}?plan=${planId}&token=${token}&lang=${language}`);
     wsRef.current = ws;
 
     ws.onopen = () => {

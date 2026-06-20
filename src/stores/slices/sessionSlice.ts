@@ -3,6 +3,11 @@ import type { RootState } from "../interview";
 
 export type Status = "idle" | "connected" | "listening" | "thinking" | "responding" | "paused" | "reconnecting" | "capturing" | "error";
 
+export interface QAEntry {
+  question: string;
+  answer: string;
+}
+
 export interface SessionSlice {
   status: Status;
   transcription: string;
@@ -10,6 +15,7 @@ export interface SessionSlice {
   error: string | null;
   questionsAnswered: number;
   sessionStartTime: number | null;
+  qaHistory: QAEntry[];
   setStatus: (status: Status) => void;
   setTranscription: (text: string) => void;
   addResponseChunk: (chunk: string) => void;
@@ -18,6 +24,8 @@ export interface SessionSlice {
   clearAll: () => void;
   incrementQuestionsAnswered: () => void;
   setSessionStartTime: (time: number | null) => void;
+  archiveCurrentQA: () => void;
+  clearQaHistory: () => void;
 }
 
 export const createSessionSlice: StateCreator<RootState, [], [], SessionSlice> = (set) => ({
@@ -27,6 +35,7 @@ export const createSessionSlice: StateCreator<RootState, [], [], SessionSlice> =
   error: null,
   questionsAnswered: 0,
   sessionStartTime: null,
+  qaHistory: [],
   setStatus: (status) => set({ status }),
   setTranscription: (text) => set({ transcription: text }),
   addResponseChunk: (chunk) =>
@@ -34,9 +43,18 @@ export const createSessionSlice: StateCreator<RootState, [], [], SessionSlice> =
       responseChunks: [...state.responseChunks, chunk],
     })),
   clearResponse: () => set({ responseChunks: [] }),
-  clearAll: () => set({ responseChunks: [], transcription: "" }),
+  clearAll: () => set({ responseChunks: [], transcription: "", qaHistory: [] }),
   setError: (error) => set({ error, status: "error" }),
   incrementQuestionsAnswered: () =>
     set((state) => ({ questionsAnswered: state.questionsAnswered + 1 })),
   setSessionStartTime: (time) => set({ sessionStartTime: time }),
+  archiveCurrentQA: () =>
+    set((state) => {
+      const answer = state.responseChunks.join("").trim();
+      if (!answer) return state;
+      return {
+        qaHistory: [...state.qaHistory, { question: state.transcription, answer }],
+      };
+    }),
+  clearQaHistory: () => set({ qaHistory: [] }),
 });

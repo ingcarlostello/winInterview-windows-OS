@@ -35,6 +35,7 @@ export function useWebSocket() {
   const setError = useInterviewStore((s) => s.setError);
   const reset = useInterviewStore((s) => s.reset);
   const incrementQuestionsAnswered = useInterviewStore((s) => s.incrementQuestionsAnswered);
+  const archiveCurrentQA = useInterviewStore((s) => s.archiveCurrentQA);
   const mergePlanInfo = useInterviewStore((s) => s.mergePlanInfo);
   const updateQuotas = useInterviewStore((s) => s.updateQuotas);
   const setLiveTranscriptionRemaining = useInterviewStore((s) => s.setLiveTranscriptionRemaining);
@@ -138,6 +139,7 @@ export function useWebSocket() {
             const status = statusMap[rawStatus] || "idle";
 
             if (prevStatusRef.current === "responding" && status === "listening") {
+              archiveCurrentQA();
               incrementQuestionsAnswered();
             }
             prevStatusRef.current = status;
@@ -211,7 +213,7 @@ export function useWebSocket() {
     } catch (e) {
       console.error("[WS] Failed to get Clerk token or connect:", e);
     }
-  }, [setStatus, setTranscription, addResponseChunk, clearResponse, clearAll, setError, incrementQuestionsAnswered, mergePlanInfo, updateQuotas, setLiveTranscriptionRemaining, setCountdownActive, setSessionStartTime, getToken, isLoaded, isSignedIn]);
+  }, [setStatus, setTranscription, addResponseChunk, clearResponse, clearAll, setError, incrementQuestionsAnswered, archiveCurrentQA, mergePlanInfo, updateQuotas, setLiveTranscriptionRemaining, setCountdownActive, setSessionStartTime, getToken, isLoaded, isSignedIn]);
 
   useEffect(() => {
     connectRef.current = connect;
