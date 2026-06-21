@@ -119,7 +119,7 @@ class DeepgramAgent:
                         model="nova-3",
                         language=self.language,
                         smart_format=True,
-                        endpointing=1500,
+                        endpointing=2000,
                     )
                 ),
             ),

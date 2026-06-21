@@ -5,9 +5,9 @@
 - **Tauri v2 desktop app** (React + TypeScript frontend, Rust shell, Python orchestration backend)
 - **Frontend**: `src/` — React 19, Tailwind CSS v4, Zustand, Vite, react-markdown, react-syntax-highlighter
 - **Desktop shell**: `src-tauri/` — Rust (window management commands, global shortcuts, ghost mode, content protection)
-- **Orchestration backend**: `backend/` — FastAPI + WebSockets, managed via Poetry. Uses Deepgram SDK (nova-3 for ASR), NVIDIA API (Gemma 3n for LLM), DashScope/Aliyun (Qwen for vision analysis)
+- **Orchestration backend**: `backend/` — FastAPI + WebSockets, managed via Poetry. Uses Deepgram SDK (nova-3 for ASR), DeepSeek API (deepseek-v4-flash for LLM), DashScope/Aliyun (Qwen for vision analysis)
 - The app runs as a transparent, always-on-top overlay (`730×730` collapsed, `1600×730` expanded, frameless) designed to float over Zoom/Meet
-- **Flow**: Microphone → PyAudio (16kHz PCM) → streamed to Deepgram Agent (ASR only) → transcription triggers LLM streaming via NVIDIA Gemma → Response chunks via WebSocket → Frontend renders Markdown + code blocks
+- **Flow**: Microphone → PyAudio (16kHz PCM) → streamed to Deepgram Agent (ASR only) → transcription triggers LLM streaming via DeepSeek → Response chunks via WebSocket → Frontend renders Markdown + code blocks
 - **Screen capture**: Tauri command `capture_screen` in `src-tauri/src/lib.rs` uses the `xcap` crate to capture the first monitor, resizes to a max width of 1280 px, encodes as JPEG (quality 75), and returns base64 → stored in Zustand (`screenImages`, max 4). Each successful capture decrements `screen_captures` quota in Convex via `useCaptureQuota`. VisionLLMService (Qwen) analyzes captures via separate WebSocket
 - **Tier system**: Lite/Pro/Ultra plans gate features and quotas. **Convex is the source of truth** for `planId` and quota remaining; the Python backend reads them on every WebSocket connection via `ConvexClient` and enforces limits with `PlanGate`. Zustand (`planSlice`) caches the live state and receives updates from both the backend WebSocket (`PLAN_INFO`/`QUOTA_UPDATE`) and a reactive Convex query (`users.getCurrentUserPlanInfo`). Rust is a shortcut guardian (`update_plan_permissions`). Quotas reset per calendar month. **Paddle** manages subscriptions via webhooks → Convex updates `planId`; users without a subscription are on the `free` tier (3 min transcription trial, 0 captures/analyses).
 
@@ -156,7 +156,7 @@ Actions: `setStatus`, `setLanguage`, `setTranscription`, `addResponseChunk`, `cl
 | Package | Purpose |
 |---|---|
 | `deepgram-sdk` | Deepgram Agent SDK (nova-3 for ASR only, linear16 encoding, 16kHz, smart_format, endpointing=1500ms) |
-| `openai` | OpenAI-compatible client for NVIDIA API and DashScope |
+| `openai` | OpenAI-compatible client for DeepSeek API and DashScope |
 | `fastapi` | Web framework |
 | `pyaudio` | Audio capture from microphone |
 | `pydantic-settings` | Configuration management |
@@ -195,7 +195,7 @@ Actions: `setStatus`, `setLanguage`, `setTranscription`, `addResponseChunk`, `cl
 
 | Module | Purpose |
 |---|---|
-| `config.py` | Pydantic settings: `deepgram_api_key`, `nvidia_api_key`, `dashscope_api_key`, `host`, `port` |
+| `config.py` | Pydantic settings: `deepgram_api_key`, `deepseek_api_key`, `dashscope_api_key`, `host`, `port` |
 | `tiers.py` | `PlanId` (LITE/PRO/ULTRA), `Feature` (CUSTOM_PROMPTS, SIMULTANEOUS_CAPTURES, SIMULTANEOUS_ANALYSIS, KEYBOARD_SHORTCUTS, INVISIBLE_MODE, GHOST_MODE), `Quota` (TRANSCRIPTION_SECONDS, SCREEN_CAPTURES, SCREEN_ANALYSES) enums. `PlanDefinition` dataclass. `PLANS` dict with per-plan features/quotas. Helper functions: `get_plan()`, `has_feature()`, `get_quota_limit()` |
 | `convex_client.py` | Authenticated HTTP client for the Python backend to call Convex HTTP actions (`/api/users/get`, `/api/quotas/decrement`) |
 | `plan_gate.py` | `FeatureBlockedError`, `QuotaExceededError` exceptions. `PlanGate` class: initializes usage from Convex remaining, enforces feature/quotas in-memory, and flushes consumption to Convex via `ConvexClient` |
@@ -213,7 +213,6 @@ Actions: `setStatus`, `setLanguage`, `setTranscription`, `addResponseChunk`, `cl
 | `llm/prompt.py` | Default system prompts for ES/EN. Custom prompt CRUD via `prompts.json` file |
 | `llm/protocol.py` | `LLMService` Protocol with `stream_response()` async iterator interface |
 | `llm/deepseek.py` | `DeepSeekLLMService` implementing `LLMService`. DeepSeek API, model `deepseek-v4-flash` |
-| `llm/nvidia.py` | `NvidiaLLMService` implementing `LLMService`. NVIDIA API (`integrate.api.nvidia.com`), model `google/gemma-3n-e4b-it`. Temperature 0.20, max_tokens 512 |
 | `llm/vision.py` | `VisionLLMService` for screen analysis. Aliyun/DashScope endpoint, model `qwen3.6-plus`. `analyze_screen()`, `analyze_multiple_screens()`. Max tokens 16384, temperature 0.60, thinking enabled |
 | `screen/capture.py` | Reserved/legacy module (currently empty). Screen capture is implemented in the Tauri Rust layer at `src-tauri/src/lib.rs` |
 | `routers/prompts.py` | REST API: `GET /prompt?lang=`, `POST /prompt`, `DELETE /prompt?lang=` |
@@ -234,7 +233,6 @@ All messages follow: `{"type": "...", "data": {...}}` (via `ConnectionManager`) 
 
 - Backend requires in `backend/.env`:
   - `DEEPGRAM_API_KEY` — Deepgram Agent access
-  - `NVIDIA_API_KEY` — NVIDIA API for Gemma 3n LLM
   - `DASHSCOPE_API_KEY` — Aliyun/DashScope for Qwen vision analysis
 - See `backend/.env.example` for template
 - The `.gitignore` ignores `.env` and `backend/.env`
