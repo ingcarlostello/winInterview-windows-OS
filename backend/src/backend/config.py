@@ -5,7 +5,6 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     deepgram_api_key: str = ""
-    nvidia_api_key: str = ""
     deepseek_api_key: str = ""
     dashscope_api_key: str = ""
     clerk_jwks_url: str = ""
