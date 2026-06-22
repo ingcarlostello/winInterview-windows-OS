@@ -5,10 +5,10 @@
 - **Tauri v2 desktop app** (React + TypeScript frontend, Rust shell, Python orchestration backend)
 - **Frontend**: `src/` — React 19, Tailwind CSS v4, Zustand, Vite, react-markdown, react-syntax-highlighter
 - **Desktop shell**: `src-tauri/` — Rust (window management commands, global shortcuts, ghost mode, content protection)
-- **Orchestration backend**: `backend/` — FastAPI + WebSockets, managed via Poetry. Uses Deepgram SDK (nova-3 for ASR), DeepSeek API (deepseek-v4-flash for LLM), DashScope/Aliyun (Qwen for vision analysis)
+- **Orchestration backend**: `backend/` — FastAPI + WebSockets, managed via Poetry. Uses Deepgram SDK (nova-3 for ASR), DeepSeek API (deepseek-v4-flash for LLM), MiniMax (MiniMax-M3 for vision analysis)
 - The app runs as a transparent, always-on-top overlay (`730×730` collapsed, `1600×730` expanded, frameless) designed to float over Zoom/Meet
 - **Flow**: Microphone → PyAudio (16kHz PCM) → streamed to Deepgram Agent (ASR only) → transcription triggers LLM streaming via DeepSeek → Response chunks via WebSocket → Frontend renders Markdown + code blocks
-- **Screen capture**: Tauri command `capture_screen` in `src-tauri/src/lib.rs` uses the `xcap` crate to capture the first monitor, resizes to a max width of 1280 px, encodes as JPEG (quality 75), and returns base64 → stored in Zustand (`screenImages`, max 4). Each successful capture decrements `screen_captures` quota in Convex via `useCaptureQuota`. VisionLLMService (Qwen) analyzes captures via separate WebSocket
+- **Screen capture**: Tauri command `capture_screen` in `src-tauri/src/lib.rs` uses the `xcap` crate to capture the first monitor, resizes to a max width of 1280 px, encodes as JPEG (quality 75), and returns base64 → stored in Zustand (`screenImages`, max 4). Each successful capture decrements `screen_captures` quota in Convex via `useCaptureQuota`. VisionLLMService (MiniMax-M3) analyzes captures via separate WebSocket
 - **Tier system**: Lite/Pro/Ultra plans gate features and quotas. **Convex is the source of truth** for `planId` and quota remaining; the Python backend reads them on every WebSocket connection via `ConvexClient` and enforces limits with `PlanGate`. Zustand (`planSlice`) caches the live state and receives updates from both the backend WebSocket (`PLAN_INFO`/`QUOTA_UPDATE`) and a reactive Convex query (`users.getCurrentUserPlanInfo`). Rust is a shortcut guardian (`update_plan_permissions`). Quotas reset per calendar month. **Paddle** manages subscriptions via webhooks → Convex updates `planId`; users without a subscription are on the `free` tier (3 min transcription trial, 0 captures/analyses).
 
 ## Commands
@@ -125,7 +125,7 @@ Actions: `setStatus`, `setLanguage`, `setTranscription`, `addResponseChunk`, `cl
 - `Controls.tsx` — content protection button shows Lock icon when `!invisible_mode`
 - `StatusBar.tsx` — Crown icon + plan name badge; ghost/invisible mode badges conditional on plan
 - `Overlay.tsx` — `useEffect` auto-disables `contentProtected` when plan lacks `invisible_mode`; shortcut event listeners gated by `canUseGhostMode`/`canUseInvisibleMode`
-- `ScreenPanel.tsx` — `MAX_CAPTURES` varies by `simultaneous_captures` feature; `capturesRemaining`/`capturesExceeded` and `analysesRemaining`/`analysesExceeded` shown; `custom_prompts` gates only the prompt textarea ("Pro" badge + Lock icon); the analyze button is always available while quota remains and uses the default prompt when custom prompts are locked; `?token=` param on WS URL
+- `ScreenPanel.tsx` — `MAX_CAPTURES` varies by `simultaneous_captures` feature; `capturesRemaining`/`capturesExceeded` and `analysesRemaining`/`analysesExceeded` shown; `custom_prompts` gates only the prompt textarea ("Pro" badge + Lock icon); the analyze button is always available while quota remains and uses the default prompt when custom prompts are locked; `thinking_mode` (Ultra-only) gates a thinking toggle (Brain icon + switch) that sends `thinking_enabled` in the WS payload; `?token=` param on WS URL
 - `screenSlice.ts` — `canCaptureScreen()` checks plan features and quota
 
 ### Components
@@ -141,7 +141,7 @@ Actions: `setStatus`, `setLanguage`, `setTranscription`, `addResponseChunk`, `cl
 | `PromptEditor.tsx` | Collapsible editor. Textarea for custom prompt. Save button (triggers reconnect), Restore default button. Shows "Active prompt" indicator. Locked state with "Pro" badge when `!custom_prompts` |
 | `QuestionCounter.tsx` | Displays count of answered questions. Hidden when count is 0. Singular/plural handling via translations |
 | `LanguageSelector.tsx` | Dropdown selector for ES/EN with flag emojis. Click-outside-to-close behavior. Updates store language and sends WebSocket language change command |
-| `ScreenPanel.tsx` | Screen capture analysis panel. Thumbnail grid (max 4 captures). Capture button invokes Tauri `capture_screen` command. WebSocket connection to `ws://localhost:8000/api/ws/analyze-screens` for vision analysis. Prompt textarea for custom analysis instructions. Markdown-rendered solution output with syntax highlighting. Clear button. `custom_prompts` gate on textarea + analyze button with "Pro" badge + Lock icon; `?plan=` param on WS URL |
+| `ScreenPanel.tsx` | Screen capture analysis panel. Thumbnail grid (max 4 captures). Capture button invokes Tauri `capture_screen` command. WebSocket connection to `ws://localhost:8000/api/ws/analyze-screens` for vision analysis. Prompt textarea for custom analysis instructions. Markdown-rendered solution output with syntax highlighting. Clear button. `custom_prompts` gate on textarea + analyze button with "Pro" badge + Lock icon; `thinking_mode` (Ultra-only) toggle with Brain icon + animated switch; `?plan=` param on WS URL |
 
 ### CSS
 
@@ -156,7 +156,7 @@ Actions: `setStatus`, `setLanguage`, `setTranscription`, `addResponseChunk`, `cl
 | Package | Purpose |
 |---|---|
 | `deepgram-sdk` | Deepgram Agent SDK (nova-3 for ASR only, linear16 encoding, 16kHz, smart_format, endpointing=1500ms) |
-| `openai` | OpenAI-compatible client for DeepSeek API and DashScope |
+| `openai` | OpenAI-compatible client for DeepSeek API and MiniMax |
 | `fastapi` | Web framework |
 | `pyaudio` | Audio capture from microphone |
 | `pydantic-settings` | Configuration management |
@@ -178,7 +178,7 @@ Actions: `setStatus`, `setLanguage`, `setTranscription`, `addResponseChunk`, `cl
 - `AudioStreamingService` encapsulates the full audio pipeline (PyAudio + Deepgram) with callback-based async bridging
 - `ConversationHistory` manages the message list with system prompt preservation and auto-trimming at 20 messages
 - LLM streaming via DeepSeek API (deepseek-v4-flash) — separate from Deepgram
-- Vision analysis via DashScope/Aliyun (Qwen) — separate WebSocket endpoint
+- Vision analysis via MiniMax (MiniMax-M3) — separate WebSocket endpoint
 - Audio captured via PyAudio (16kHz, 16-bit, mono) and streamed directly to Deepgram (no webrtcvad)
 - `asyncio.run_coroutine_threadsafe` bridges sync Deepgram callbacks to async event loop
 - Agent runs in separate thread to avoid blocking the async WebSocket handler
@@ -195,8 +195,8 @@ Actions: `setStatus`, `setLanguage`, `setTranscription`, `addResponseChunk`, `cl
 
 | Module | Purpose |
 |---|---|
-| `config.py` | Pydantic settings: `deepgram_api_key`, `deepseek_api_key`, `dashscope_api_key`, `host`, `port` |
-| `tiers.py` | `PlanId` (LITE/PRO/ULTRA), `Feature` (CUSTOM_PROMPTS, SIMULTANEOUS_CAPTURES, SIMULTANEOUS_ANALYSIS, KEYBOARD_SHORTCUTS, INVISIBLE_MODE, GHOST_MODE), `Quota` (TRANSCRIPTION_SECONDS, SCREEN_CAPTURES, SCREEN_ANALYSES) enums. `PlanDefinition` dataclass. `PLANS` dict with per-plan features/quotas. Helper functions: `get_plan()`, `has_feature()`, `get_quota_limit()` |
+| `config.py` | Pydantic settings: `deepgram_api_key`, `deepseek_api_key`, `minimax_api_key`, `host`, `port` |
+| `tiers.py` | `PlanId` (LITE/PRO/ULTRA), `Feature` (CUSTOM_PROMPTS, SIMULTANEOUS_CAPTURES, SIMULTANEOUS_ANALYSIS, KEYBOARD_SHORTCUTS, INVISIBLE_MODE, GHOST_MODE, THINKING_MODE), `Quota` (TRANSCRIPTION_SECONDS, SCREEN_CAPTURES, SCREEN_ANALYSES) enums. `PlanDefinition` dataclass. `PLANS` dict with per-plan features/quotas. Helper functions: `get_plan()`, `has_feature()`, `get_quota_limit()` |
 | `convex_client.py` | Authenticated HTTP client for the Python backend to call Convex HTTP actions (`/api/users/get`, `/api/quotas/decrement`) |
 | `plan_gate.py` | `FeatureBlockedError`, `QuotaExceededError` exceptions. `PlanGate` class: initializes usage from Convex remaining, enforces feature/quotas in-memory, and flushes consumption to Convex via `ConvexClient` |
 | `context.py` | `ConversationHistory` — message list management (system prompt + user/assistant messages, max 20, auto-trim). Used by `AgentSession` |
@@ -213,10 +213,10 @@ Actions: `setStatus`, `setLanguage`, `setTranscription`, `addResponseChunk`, `cl
 | `llm/prompt.py` | Default system prompts for ES/EN. Custom prompt CRUD via `prompts.json` file |
 | `llm/protocol.py` | `LLMService` Protocol with `stream_response()` async iterator interface |
 | `llm/deepseek.py` | `DeepSeekLLMService` implementing `LLMService`. DeepSeek API, model `deepseek-v4-flash` |
-| `llm/vision.py` | `VisionLLMService` for screen analysis. Aliyun/DashScope endpoint, model `qwen3.6-plus`. `analyze_screen()`, `analyze_multiple_screens()`. Max tokens 16384, temperature 0.60, thinking enabled |
+| `llm/vision.py` | `VisionLLMService` for screen analysis. MiniMax endpoint (`https://api.minimax.io/v1`), model `MiniMax-M3`. `analyze_multiple_screens()`. Max_completion_tokens 16384, temperature 1.0, `thinking_enabled` parameter controls `extra_body={"thinking": {"type": "adaptive"|"disabled"}}` |
 | `screen/capture.py` | Reserved/legacy module (currently empty). Screen capture is implemented in the Tauri Rust layer at `src-tauri/src/lib.rs` |
 | `routers/prompts.py` | REST API: `GET /prompt?lang=`, `POST /prompt`, `DELETE /prompt?lang=` |
-| `routers/screens.py` | WebSocket: `/api/ws/analyze-screens` accepts `?token=`, verifies the Clerk JWT, fetches plan/quotas from Convex, then receives JSON with images array + prompt and streams vision analysis chunks. Uses `WsMessageType` enum. `PlanGate` per connection; gates `SIMULTANEOUS_ANALYSIS` and `SCREEN_ANALYSES` quota; flushes consumption to Convex on close |
+| `routers/screens.py` | WebSocket: `/api/ws/analyze-screens` accepts `?token=`, verifies the Clerk JWT, fetches plan/quotas from Convex, then receives JSON with images array + prompt + `thinking_enabled` and streams vision analysis chunks. Uses `WsMessageType` enum. `PlanGate` per connection; gates `SIMULTANEOUS_ANALYSIS`, `THINKING_MODE`, and `SCREEN_ANALYSES` quota; silently forces `thinking_enabled=false` if plan lacks `THINKING_MODE`; flushes consumption to Convex on close |
 
 ### WebSocket Message Format
 
@@ -233,7 +233,7 @@ All messages follow: `{"type": "...", "data": {...}}` (via `ConnectionManager`) 
 
 - Backend requires in `backend/.env`:
   - `DEEPGRAM_API_KEY` — Deepgram Agent access
-  - `DASHSCOPE_API_KEY` — Aliyun/DashScope for Qwen vision analysis
+  - `MINIMAX_API_KEY` — MiniMax for MiniMax-M3 vision analysis
 - See `backend/.env.example` for template
 - The `.gitignore` ignores `.env` and `backend/.env`
 
@@ -415,7 +415,7 @@ Frontend (PricingModal) → useCheckout → Convex action: paddle.createCheckout
 | `convex/paddle.ts` | `paddleWebhook` httpAction (verifies Paddle-Signature, processes events) + `createCheckout` action (creates Paddle transaction, finds/creates customer) |
 | `convex/http.ts` | Registers `/api/webhooks/paddle` and existing routes |
 | `convex/users.ts` | `applySubscription` (internalMutation — the ONLY way to change planId), `getCurrentUserSubscription` query |
-| `convex/constants.ts` | `PlanId` includes `free`, `PLAN_QUOTAS.free`, `PLAN_PRICES_USD` |
+| `convex/constants.ts` | `PlanId` includes `free`, `PLAN_QUOTAS.free`, `PLAN_FEATURES` (includes `thinking_mode` for Ultra), `PLAN_PRICES_USD` |
 | `src/hooks/useCheckout.ts` | Calls `createCheckout` action, opens checkout URL via Tauri `open_url` command |
 | `src/components/PricingModal.tsx` | 3-tier pricing UI, subscribe buttons, subscription management (cancel/update payment via management_urls) |
 | `src/components/StatusBar.tsx` | Crown badge opens PricingModal |

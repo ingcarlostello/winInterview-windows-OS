@@ -7,11 +7,11 @@ logger = logging.getLogger(__name__)
 
 
 class VisionLLMService:
-    """Servicio de vision para analisis de capturas de pantalla usando Qwen via DashScope."""
+    """Servicio de vision para analisis de capturas de pantalla usando MiniMax M3."""
 
     def __init__(self, api_key: str) -> None:
         self.client = AsyncOpenAI(
-            base_url="https://ws-s1wgsa8mxoickj8w.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
+            base_url="https://api.minimax.io/v1",
             api_key=api_key,
         )
 
@@ -21,6 +21,7 @@ class VisionLLMService:
         custom_prompt: str,
         session_id: str,
         language: str = "es",
+        thinking_enabled: bool = False,
     ) -> AsyncIterator[str]:
         """Analiza una o multiples capturas de pantalla con contexto acumulativo.
 
@@ -29,7 +30,8 @@ class VisionLLMService:
         """
         logger.info(
             f"Vision analysis started for session {session_id} "
-            f"with {len(images_base64)} images, language={language}"
+            f"with {len(images_base64)} images, language={language}, "
+            f"thinking={thinking_enabled}"
         )
 
         is_multi = len(images_base64) > 1
@@ -94,12 +96,16 @@ class VisionLLMService:
 
         try:
             completion = await self.client.chat.completions.create(
-                model="qwen3.6-plus",
+                model="MiniMax-M3",
                 messages=messages,
-                max_tokens=16384,
-                temperature=0.60,
+                max_completion_tokens=16384,
+                temperature=1.0,
                 top_p=0.95,
-                extra_body={"enable_thinking": True},
+                extra_body=(
+                    {"thinking": {"type": "adaptive"}}
+                    if thinking_enabled
+                    else {"thinking": {"type": "disabled"}}
+                ),
                 stream=True,
             )
             async for chunk in completion:

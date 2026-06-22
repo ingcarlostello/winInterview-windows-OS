@@ -16,6 +16,7 @@ class Feature(StrEnum):
     KEYBOARD_SHORTCUTS = "keyboard_shortcuts"
     INVISIBLE_MODE = "invisible_mode"
     GHOST_MODE = "ghost_mode"
+    THINKING_MODE = "thinking_mode"
 
 
 class Quota(StrEnum):
@@ -83,6 +84,7 @@ PLANS: dict[PlanId, PlanDefinition] = {
             Feature.KEYBOARD_SHORTCUTS,
             Feature.INVISIBLE_MODE,
             Feature.GHOST_MODE,
+            Feature.THINKING_MODE,
         }),
         quotas={
             Quota.TRANSCRIPTION_SECONDS: 8 * 3600,

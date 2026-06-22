@@ -10,6 +10,7 @@ export interface FeatureFlags {
   keyboard_shortcuts: boolean;
   invisible_mode: boolean;
   ghost_mode: boolean;
+  thinking_mode: boolean;
 }
 
 export interface QuotaInfo {
@@ -58,6 +59,7 @@ export const DEFAULT_PLAN_INFO: PlanInfo = {
     keyboard_shortcuts: false,
     invisible_mode: false,
     ghost_mode: false,
+    thinking_mode: false,
   },
   quotas: {
     transcription_seconds: { used: 0, limit: 180, remaining: 180 },
