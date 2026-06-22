@@ -19,4 +19,4 @@ def get_llm_service() -> LLMService:
 
 @lru_cache()
 def get_vision_service() -> VisionLLMService:
-    return VisionLLMService(api_key=settings.dashscope_api_key)
+    return VisionLLMService(api_key=settings.minimax_api_key)

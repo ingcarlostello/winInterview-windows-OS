@@ -1,4 +1,4 @@
-import { Monitor, Sparkles, RefreshCw, Camera, Lock } from "lucide-react";
+import { Monitor, Sparkles, RefreshCw, Camera, Lock, Brain } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
@@ -9,7 +9,7 @@ import { useTranslation } from "../hooks/useTranslation";
 import { useFeatureGate, useQuotaInfo } from "../hooks/useFeatureGate";
 import { useScreenCapture } from "../hooks/useScreenCapture";
 import { WS_MESSAGE_TYPE, WS_STATUS } from "../constants/ws";
-import { useCallback, useRef } from "react";
+import { useCallback, useRef, useState } from "react";
 
 const MAX_CAPTURES_ULTRA = 4;
 const MAX_CAPTURES_LITE = 1;
@@ -36,9 +36,12 @@ export default function ScreenPanel() {
   const { getToken } = useAuth();
   const { allowed: canUseSimultaneousCaptures } = useFeatureGate("simultaneous_captures");
   const { allowed: canUseCustomPrompts } = useFeatureGate("custom_prompts");
+  const { allowed: canUseThinkingMode } = useFeatureGate("thinking_mode");
   const { remaining: capturesRemaining, exceeded: capturesExceeded } = useQuotaInfo("screen_captures");
   const { remaining: analysesRemaining, exceeded: analysesExceeded } = useQuotaInfo("screen_analyses");
   const { captureScreen } = useScreenCapture();
+
+  const [thinkingEnabled, setThinkingEnabled] = useState(false);
 
   const MAX_CAPTURES = canUseSimultaneousCaptures ? MAX_CAPTURES_ULTRA : MAX_CAPTURES_LITE;
 
@@ -75,6 +78,7 @@ export default function ScreenPanel() {
         JSON.stringify({
           images: screenImages,
           prompt: effectivePrompt,
+          thinking_enabled: canUseThinkingMode ? thinkingEnabled : false,
         })
       );
     };
@@ -125,6 +129,8 @@ export default function ScreenPanel() {
     setIsAnalyzingScreen,
     getToken,
     canUseCustomPrompts,
+    canUseThinkingMode,
+    thinkingEnabled,
     mergePlanInfo,
     updateQuota,
     t,
@@ -256,6 +262,36 @@ export default function ScreenPanel() {
                   disabled={!canUseCustomPrompts}
                   className="w-full min-h-[80px] bg-black/20 px-3 py-2 text-white text-xs resize-y focus:outline-none focus:bg-black/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 />
+                {canUseThinkingMode && (
+                  <button
+                    type="button"
+                    onClick={() => setThinkingEnabled((v) => !v)}
+                    className="border-t border-white/10 px-3 py-2 w-full flex items-center gap-1.5 cursor-pointer transition-colors"
+                  >
+                    <Brain
+                      size={12}
+                      className={thinkingEnabled ? "text-accent" : "text-white/40"}
+                    />
+                    <span
+                      className={`text-[10px] font-medium ${
+                        thinkingEnabled ? "text-accent" : "text-white/40"
+                      }`}
+                    >
+                      {t("thinkingMode")}
+                    </span>
+                    <span
+                      className={`ml-auto w-8 h-4 rounded-full transition-colors relative ${
+                        thinkingEnabled ? "bg-accent" : "bg-white/15"
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${
+                          thinkingEnabled ? "left-4" : "left-0.5"
+                        }`}
+                      />
+                    </span>
+                  </button>
+                )}
                 <div className="border-t border-white/10 px-3 py-2 flex items-center justify-between">
                   <span className="text-white/40 text-[10px]">
                     {analysesExceeded

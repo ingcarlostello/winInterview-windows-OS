@@ -68,6 +68,7 @@ async def analyze_screens_ws(websocket: WebSocket):
         data = await websocket.receive_json()
         images = data.get("images", [])
         prompt = data.get("prompt", "")
+        thinking_enabled = data.get("thinking_enabled", False)
         lang = websocket.query_params.get("lang", "es")
 
         if not images:
@@ -96,6 +97,9 @@ async def analyze_screens_ws(websocket: WebSocket):
             })
             return
 
+        if thinking_enabled and not plan_gate.can_use_feature(Feature.THINKING_MODE):
+            thinking_enabled = False
+
         vision_service = get_vision_service()
 
         await websocket.send_json({
@@ -104,7 +108,8 @@ async def analyze_screens_ws(websocket: WebSocket):
         })
 
         async for chunk in vision_service.analyze_multiple_screens(
-            images, prompt, session_id, language=lang
+            images, prompt, session_id, language=lang,
+            thinking_enabled=thinking_enabled,
         ):
             await websocket.send_json({
                 "type": WsMessageType.CHUNK,
