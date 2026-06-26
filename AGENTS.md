@@ -231,11 +231,19 @@ All messages follow: `{"type": "...", "data": {...}}` (via `ConnectionManager`) 
 
 ## Environment
 
-- Backend requires in `backend/.env`:
+- Frontend requires `.env.local` in project root:
+  - `VITE_CLERK_PUBLISHABLE_KEY` — Clerk publishable key (`pk_test_...`)
+  - `VITE_CONVEX_URL` — Convex deployment URL (`https://<deployment>.convex.cloud`)
+  - `CONVEX_DEPLOYMENT` — Deployment slug used by Convex CLI (`dev:<deployment-name>`)
+- Backend requires `backend/.env`:
   - `DEEPGRAM_API_KEY` — Deepgram Agent access
   - `MINIMAX_API_KEY` — MiniMax for MiniMax-M3 vision analysis
+  - `DEEPSEEK_API_KEY` — DeepSeek LLM access
+  - `CLERK_SECRET_KEY` — Clerk secret key (`sk_test_...`) for JWT verification
+  - `CONVEX_BACKEND_KEY` — Backend-to-Convex authentication key
 - See `backend/.env.example` for template
-- The `.gitignore` ignores `.env` and `backend/.env`
+- The `.gitignore` ignores `.env`, `.env.local`, and `backend/.env`
+- **Active Convex deployment** (Windows dev): `dev:qualified-cuttlefish-550` → `https://qualified-cuttlefish-550.convex.cloud`
 
 ## Global shortcuts
 
@@ -284,8 +292,12 @@ The app uses **Clerk** for identity management and **Convex** for user data pers
 
 **Environment variables:**
 
-- **Frontend** (`.env`):
-  - `VITE_CLERK_PUBLISHABLE_KEY` — Clerk publishable key (pk_test_...)
+- **Frontend** (`.env.local` in project root):
+  - `VITE_CLERK_PUBLISHABLE_KEY` — Clerk publishable key (`pk_test_...`)
+  - `VITE_CONVEX_URL` — Convex deployment URL
+  - `CONVEX_DEPLOYMENT` — Convex CLI deployment slug (e.g. `dev:qualified-cuttlefish-550`)
+- **Backend** (`backend/.env`):
+  - `CLERK_SECRET_KEY` — Clerk secret key (`sk_test_...`) for JWT verification in Python
 - **Convex** (set via `npx convex env set`):
   - `CLERK_WEBHOOK_SIGNING_SECRET` — Webhook signing secret (whsec_...)
   - `CONVEX_BACKEND_KEY` — Backend-to-Convex authentication key
@@ -437,10 +449,96 @@ Frontend (PricingModal) → useCheckout → Convex action: paddle.createCheckout
 - Price Ultra: `pri_01kvc6nab71h76fpdcx203wkag`
 - Notification setting: `ntfset_01kvc6nn781ktgwfd8n5sqrqfd`
 
+## Model Context Protocol (MCP) Servers
+
+Claude Code can access these external services via MCP for development:
+
+| Server | Type | Purpose | Auth |
+|---|---|---|---|
+| **Convex** | Local | Backend database, HTTP actions, mutations, queries | Project auth (via `convex env`) |
+| **Clerk** | Remote | User identity, JWT verification, user management | Built-in |
+| **Paddle Sandbox** | Remote | Testing subscriptions, billing flows | `PADDLE_SANDBOX_API_KEY` env var |
+| **Paddle Live** | Remote | Production subscriptions (read-only in dev) | `PADDLE_LIVE_API_KEY` env var |
+
+**Configuration**: `.claude/settings.json` — MCPs are auto-loaded when Claude Code starts.
+
+### Using MCP in Claude Code
+
+- **Convex**: Use MCP to read/write data, inspect schema, run HTTP actions
+- **Clerk**: Inspect user records, verify JWT claims, test webhooks
+- **Paddle**: Test subscription flows, preview pricing, inspect transactions
+
+---
+
+## Windows Development Setup
+
+### Environment
+
+The app is being developed for **Windows 11** with the following toolchain:
+
+- **Python 3.14.6** installed via `winget` (required by backend `pyproject.toml`)
+- **Poetry 2.4.1** for Python dependency management (installed via pip, not official installer due to internet constraints)
+- **Microsoft Visual Studio Build Tools 2026** for C++ compilation support
+- **Node.js** (via `winget`) for frontend tooling
+- **Rust toolchain** (via `rustup`) for Tauri compilation (optional, needed only for `npm run tauri build`)
+
+### PATH Configuration
+
+Windows has a built-in alias that redirects `python` to the Microsoft Store app, which interferes with Poetry. To work around this:
+
+1. Python 3.14 is installed at: `C:\Users\react\AppData\Local\Programs\Python\Python314`
+2. Poetry scripts are at: `C:\Users\react\AppData\Local\Programs\Python\Python314\Scripts`
+3. Before running Poetry or Python commands, the script files (`start-backend.ps1`, `start-frontend.ps1`) explicitly reorder PATH to prioritize Python 3.14 and remove the WindowsApps alias
+
+### Audio Capture: PyAudio → sounddevice
+
+**Problem**: `pyaudio` requires compiling C extensions against PortAudio, which fails even with Visual Studio Build Tools installed on Windows.
+
+**Solution**: Replaced `pyaudio (>=0.2.14)` with `sounddevice (>=0.4.6)` in `backend/pyproject.toml`. sounddevice:
+- Is pure Python with precompiled wheels (no build step)
+- Provides the same audio capture interface via NumPy arrays
+- Works out-of-the-box on Windows, macOS, Linux
+- Backend code in `audio/capture.py` and `audio/service.py` will need minimal updates to use sounddevice API instead of PyAudio
+
+### Startup Scripts
+
+Two PowerShell scripts simplify local development:
+
+- `start-backend.ps1` — Fixes PATH, then runs `poetry run uvicorn backend.main:app --reload --port 8000`
+- `start-frontend.ps1` — Runs `npm install` (if needed), then `npm run tauri dev`
+
+Usage: Open two PowerShell windows in the project root and run:
+```powershell
+# Terminal 1
+.\start-backend.ps1
+
+# Terminal 2
+.\start-frontend.ps1
+```
+
+### Dependencies Updated
+
+- `pyproject.toml` — Replaced `pyaudio` with `sounddevice`
+- `poetry.lock` — Auto-regenerated via `poetry lock` (6/26/2026)
+
+### Known Limitations
+
+- **Rust toolchain not yet installed** — Needed for `npm run tauri build`. For dev, `npm run tauri dev` uses the precompiled Tauri CLI.
+- **Backend API keys pending** — `backend/.env` has been created with `CLERK_SECRET_KEY`; `DEEPGRAM_API_KEY`, `DEEPSEEK_API_KEY`, `MINIMAX_API_KEY`, and `CONVEX_BACKEND_KEY` still need real values.
+- **Paddle env vars** — `PADDLE_SANDBOX_API_KEY` / `PADDLE_LIVE_API_KEY` not yet set in system env (referenced in `.claude/settings.json` MCP headers).
+
+### Env Files Status (Windows dev machine)
+
+| File | Status | Notes |
+|---|---|---|
+| `.env.local` | ✅ Created | `VITE_CLERK_PUBLISHABLE_KEY`, `VITE_CONVEX_URL`, `CONVEX_DEPLOYMENT` set |
+| `backend/.env` | ⚠️ Partial | `CLERK_SECRET_KEY` set; Deepgram/DeepSeek/MiniMax/Convex keys still placeholder |
+
 ## Other files
 
 - `sugerencias.txt` — Clean Code/SOLID improvement suggestions (Spanish), covers SRP violations, command handler refactoring, conversation history management, type safety, magic strings
 - `.vscode/settings.json` — Python interpreter path (Poetry virtualenv), extraPaths for backend analysis
+- `SETUP-WINDOWS.md` — Complete Windows setup guide with troubleshooting
 
 <!-- convex-ai-start -->
 

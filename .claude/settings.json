@@ -1,0 +1,31 @@
+{
+  "mcpServers": {
+    "convex": {
+      "type": "local",
+      "command": "npx",
+      "args": ["-y", "convex@latest", "mcp", "start", "--project-dir", "c:\\Users\\react\\OneDrive\\Desktop\\win-interview\\winInterview-windows-OS"],
+      "enabled": true
+    },
+    "clerk": {
+      "type": "remote",
+      "url": "https://mcp.clerk.com/mcp",
+      "enabled": true
+    },
+    "paddle-sandbox": {
+      "type": "remote",
+      "url": "https://sandbox-mcp.paddle.com/mcp",
+      "enabled": true,
+      "headers": {
+        "Authorization": "Bearer ${env:PADDLE_SANDBOX_API_KEY}"
+      }
+    },
+    "paddle-live": {
+      "type": "remote",
+      "url": "https://mcp.paddle.com/mcp",
+      "enabled": true,
+      "headers": {
+        "Authorization": "Bearer ${env:PADDLE_LIVE_API_KEY}"
+      }
+    }
+  }
+}

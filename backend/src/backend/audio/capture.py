@@ -2,7 +2,8 @@ import asyncio
 import threading
 from collections.abc import Callable
 
-import pyaudio
+import numpy as np
+import sounddevice as sd
 
 
 class AudioCapture:
@@ -10,15 +11,12 @@ class AudioCapture:
     FRAME_DURATION_MS = 20
     FRAME_SIZE = int(SAMPLE_RATE * FRAME_DURATION_MS / 1000)
     CHANNELS = 1
-    FORMAT = pyaudio.paInt16
 
     def __init__(self):
-        self._audio = pyaudio.PyAudio()
-        self._stream: pyaudio.Stream | None = None
+        self._stream: sd.InputStream | None = None
         self._running = False
         self._loop_task: asyncio.Task[None] | None = None
         self._stream_lock = threading.Lock()
-
         self._on_audio_frame: Callable[[bytes], None] | None = None
 
     def set_handlers(
@@ -31,14 +29,14 @@ class AudioCapture:
 
     async def start(self) -> None:
         try:
-            self._stream = self._audio.open(
-                format=self.FORMAT,
+            self._stream = sd.InputStream(
+                samplerate=self.SAMPLE_RATE,
                 channels=self.CHANNELS,
-                rate=self.SAMPLE_RATE,
-                input=True,
-                frames_per_buffer=self.FRAME_SIZE,
+                dtype=np.int16,
+                blocksize=self.FRAME_SIZE,
             )
-        except OSError:
+            self._stream.start()
+        except Exception:
             return
 
         self._running = True
@@ -56,10 +54,9 @@ class AudioCapture:
         if self._stream:
             try:
                 with self._stream_lock:
-                    if self._stream.is_active():
-                        self._stream.stop_stream()
+                    self._stream.stop()
                     self._stream.close()
-            except OSError:
+            except Exception:
                 pass
             self._stream = None
 
@@ -69,15 +66,16 @@ class AudioCapture:
         while self._running and self._stream:
             def _read_chunk():
                 with self._stream_lock:
-                    if self._stream and self._stream.is_active():
-                        return self._stream.read(self.FRAME_SIZE, exception_on_overflow=False)
+                    if self._stream:
+                        data, _ = self._stream.read(self.FRAME_SIZE)
+                        return data.tobytes()
                     return None
 
             try:
                 frame = await loop.run_in_executor(None, _read_chunk)
                 if frame is None:
                     break
-            except OSError:
+            except Exception:
                 break
 
             try:
@@ -92,12 +90,8 @@ class AudioCapture:
         if self._stream:
             try:
                 with self._stream_lock:
-                    if self._stream.is_active():
-                        self._stream.stop_stream()
+                    self._stream.stop()
                     self._stream.close()
-            except OSError:
+            except Exception:
                 pass
-        try:
-            self._audio.terminate()
-        except OSError:
-            pass
+            self._stream = None
