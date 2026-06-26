@@ -1,6 +1,6 @@
 import { httpRouter } from "convex/server";
 import { decrementQuotaAction, clerkWebhook } from "./webhooks";
-import { getUserAndQuotaAction } from "./backend";
+import { getUserAndQuotaAction, getUserByKeyAction } from "./backend";
 import { paddleWebhook } from "./paddle";
 
 const http = httpRouter();
@@ -15,6 +15,12 @@ http.route({
   path: "/api/users/get",
   method: "POST",
   handler: getUserAndQuotaAction,
+});
+
+http.route({
+  path: "/api/users/get-by-key",
+  method: "POST",
+  handler: getUserByKeyAction,
 });
 
 http.route({

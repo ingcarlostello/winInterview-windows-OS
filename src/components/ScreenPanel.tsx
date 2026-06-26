@@ -3,7 +3,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
-import { useAuth } from "@clerk/clerk-react";
+import { useAppAuth } from "../hooks/useAppAuth";
 import { useInterviewStore } from "../stores/interview";
 import { useTranslation } from "../hooks/useTranslation";
 import { useFeatureGate, useQuotaInfo } from "../hooks/useFeatureGate";
@@ -33,7 +33,7 @@ export default function ScreenPanel() {
 
   const wsRef = useRef<WebSocket | null>(null);
   const { t } = useTranslation();
-  const { getToken } = useAuth();
+  const { getAuthParam } = useAppAuth();
   const { allowed: canUseSimultaneousCaptures } = useFeatureGate("simultaneous_captures");
   const { allowed: canUseCustomPrompts } = useFeatureGate("custom_prompts");
   const { allowed: canUseThinkingMode } = useFeatureGate("thinking_mode");
@@ -57,9 +57,9 @@ export default function ScreenPanel() {
       wsRef.current.close();
     }
 
-    const token = await getToken();
-    if (!token) {
-      console.error("Cannot start analysis: missing auth token");
+    const authParam = await getAuthParam();
+    if (!authParam) {
+      console.error("Cannot start analysis: missing auth credential");
       return;
     }
 
@@ -70,7 +70,7 @@ export default function ScreenPanel() {
 
     const planId = useInterviewStore.getState().planInfo?.plan_id ?? "free";
     const language = useInterviewStore.getState().language;
-    const ws = new WebSocket(`${WS_ANALYZE_URL}?plan=${planId}&token=${token}&lang=${language}`);
+    const ws = new WebSocket(`${WS_ANALYZE_URL}?plan=${planId}&${authParam}&lang=${language}`);
     wsRef.current = ws;
 
     ws.onopen = () => {
@@ -127,7 +127,7 @@ export default function ScreenPanel() {
     clearScreenChunks,
     addScreenChunk,
     setIsAnalyzingScreen,
-    getToken,
+    getAuthParam,
     canUseCustomPrompts,
     canUseThinkingMode,
     thinkingEnabled,

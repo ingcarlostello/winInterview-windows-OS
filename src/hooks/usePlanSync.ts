@@ -4,9 +4,15 @@ import { invoke } from "@tauri-apps/api/core";
 import { api } from "../../convex/_generated/api";
 import { useInterviewStore } from "../stores/interview";
 import type { PlanInfo } from "../stores/slices/planSlice";
+import { useAppAuth } from "./useAppAuth";
 
 export function usePlanSync() {
-  const convexPlanInfo = useQuery(api.users.getCurrentUserPlanInfo);
+  const { mode } = useAppAuth();
+  // Key-mode has no Clerk JWT; plan info arrives via the WS PLAN_INFO message.
+  const convexPlanInfo = useQuery(
+    api.users.getCurrentUserPlanInfo,
+    mode === "key" ? "skip" : {}
+  );
   const mergePlanInfo = useInterviewStore((s) => s.mergePlanInfo);
 
   useEffect(() => {

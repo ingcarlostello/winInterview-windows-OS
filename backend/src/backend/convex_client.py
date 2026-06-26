@@ -37,6 +37,33 @@ class ConvexClient:
             "Content-Type": "application/json",
         }
 
+    def _parse_user_data(self, data: dict[str, Any]) -> ConvexUserData:
+        """Parse the shared plan/quota/prompts JSON returned by both
+        /api/users/get and /api/users/get-by-key."""
+        plan_id_str = data.get("planId", "lite")
+        try:
+            plan_id = PlanId(plan_id_str)
+        except ValueError:
+            plan_id = PlanId.LITE
+
+        quota_data = data.get("quota") or {}
+        remaining = {
+            Quota.TRANSCRIPTION_SECONDS: int(
+                quota_data.get("transcriptionSecondsRemaining", 0)
+            ),
+            Quota.SCREEN_CAPTURES: int(quota_data.get("capturesRemaining", 0)),
+            Quota.SCREEN_ANALYSES: int(quota_data.get("analysesRemaining", 0)),
+        }
+
+        prompts_raw = data.get("prompts") or {}
+        prompts: dict[str, str] = {}
+        for lang in ("es", "en"):
+            value = prompts_raw.get(lang)
+            if isinstance(value, str) and value.strip():
+                prompts[lang] = value
+
+        return ConvexUserData(plan_id=plan_id, remaining=remaining, prompts=prompts)
+
     async def get_user_and_quota(
         self, clerk_id: str
     ) -> ConvexUserData | None:
@@ -68,29 +95,47 @@ class ConvexClient:
             logger.error("Error fetching user quota from Convex: %s", e)
             return None
 
-        plan_id_str = data.get("planId", "lite")
+        return self._parse_user_data(data)
+
+    async def get_user_by_key(
+        self, user_key: str
+    ) -> tuple[str, ConvexUserData] | None:
+        """Resolve a desktop access key ("userKey") to its owner's clerk_id plus
+        plan/quota/prompts. Used when a desktop session logs in with a pasted key
+        instead of a Clerk JWT. Returns None if the key is unknown/unconfigured."""
+        if not self.site_url or not self.backend_key:
+            logger.warning("Convex site URL or backend key not configured")
+            return None
+
+        url = f"{self.site_url}/api/users/get-by-key"
+        payload = {"userKey": user_key}
+        timeout = aiohttp.ClientTimeout(total=5)
+
         try:
-            plan_id = PlanId(plan_id_str)
-        except ValueError:
-            plan_id = PlanId.LITE
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    url, json=payload, headers=self._headers(), timeout=timeout
+                ) as response:
+                    if response.status != 200:
+                        body = await response.text()
+                        logger.error(
+                            "Failed to resolve user key from Convex: %s %s",
+                            response.status,
+                            body,
+                        )
+                        return None
 
-        quota_data = data.get("quota") or {}
-        remaining = {
-            Quota.TRANSCRIPTION_SECONDS: int(
-                quota_data.get("transcriptionSecondsRemaining", 0)
-            ),
-            Quota.SCREEN_CAPTURES: int(quota_data.get("capturesRemaining", 0)),
-            Quota.SCREEN_ANALYSES: int(quota_data.get("analysesRemaining", 0)),
-        }
+                    data: dict[str, Any] = await response.json()
+        except Exception as e:
+            logger.error("Error resolving user key from Convex: %s", e)
+            return None
 
-        prompts_raw = data.get("prompts") or {}
-        prompts: dict[str, str] = {}
-        for lang in ("es", "en"):
-            value = prompts_raw.get(lang)
-            if isinstance(value, str) and value.strip():
-                prompts[lang] = value
+        clerk_id = data.get("clerkId")
+        if not clerk_id:
+            logger.error("Convex get-by-key response missing clerkId")
+            return None
 
-        return ConvexUserData(plan_id=plan_id, remaining=remaining, prompts=prompts)
+        return clerk_id, self._parse_user_data(data)
 
     async def decrement_quota(
         self, clerk_id: str, quota_type: str, amount: int

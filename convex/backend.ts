@@ -62,3 +62,67 @@ export const getUserAndQuotaAction = httpAction(async (ctx, request) => {
     headers: { "Content-Type": "application/json" },
   });
 });
+
+// Resolves a desktop access key ("userKey") to the same plan/quota/prompts
+// payload as /api/users/get, so the Python backend can authenticate a desktop
+// session that logged in with a pasted key instead of a Clerk JWT. The returned
+// body includes `clerkId`, which the backend reuses for later quota mutations.
+export const getUserByKeyAction = httpAction(async (ctx, request) => {
+  if (request.method !== "POST") {
+    return new Response(JSON.stringify({ error: "Method not allowed" }), {
+      status: 405,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  if (!verifyBackendKey(request)) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  let body: { userKey?: string };
+  try {
+    body = await request.json();
+  } catch {
+    return new Response(JSON.stringify({ error: "Invalid JSON" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  if (!body.userKey) {
+    return new Response(
+      JSON.stringify({ error: "Missing required field: userKey" }),
+      { status: 400, headers: { "Content-Type": "application/json" } }
+    );
+  }
+
+  const owner = await ctx.runQuery(internal.users.getUserByKey, {
+    userKey: body.userKey,
+  });
+
+  if (!owner) {
+    return new Response(JSON.stringify({ error: "Invalid key" }), {
+      status: 404,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  const result = await ctx.runQuery(internal.users.getUserAndQuotaByClerkId, {
+    clerkId: owner.clerkId,
+  });
+
+  if (!result) {
+    return new Response(JSON.stringify({ error: "User not found" }), {
+      status: 404,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  return new Response(JSON.stringify(result), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
+});

@@ -29,8 +29,19 @@ async def analyze_screens_ws(websocket: WebSocket):
     session_id = str(uuid.uuid4())
 
     token = websocket.query_params.get("token")
+    key = websocket.query_params.get("key")
+    convex_client = ConvexClient()
     clerk_id = None
-    if token:
+    user_data = None
+
+    if key:
+        try:
+            resolved = await convex_client.get_user_by_key(key)
+            if resolved:
+                clerk_id, user_data = resolved
+        except Exception as e:
+            logger.error(f"Screen analysis key validation failed: {e}")
+    elif token:
         try:
             payload = verify_clerk_token(token)
             clerk_id = payload.get("sub")
@@ -45,11 +56,11 @@ async def analyze_screens_ws(websocket: WebSocket):
         await websocket.close()
         return
 
-    convex_client = ConvexClient()
     plan_id = PlanId.LITE
     remaining = None
     try:
-        user_data = await convex_client.get_user_and_quota(clerk_id)
+        if user_data is None:
+            user_data = await convex_client.get_user_and_quota(clerk_id)
         if user_data:
             plan_id = user_data.plan_id
             remaining = user_data.remaining
