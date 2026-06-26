@@ -7,7 +7,7 @@ import type { Status } from "../stores/interview";
 import type { PlanInfo } from "../stores/slices/planSlice";
 import type { Language } from "../stores/slices/settingsSlice";
 import { WS_MESSAGE_TYPE, WS_STATUS } from "../constants/ws";
-import { useAuth } from "@clerk/clerk-react";
+import { useAppAuth } from "./useAppAuth";
 
 const WS_BASE = "ws://localhost:8000/ws";
 
@@ -17,7 +17,7 @@ interface WSMessage {
 }
 
 export function useWebSocket() {
-  const { getToken, isLoaded, isSignedIn } = useAuth();
+  const { mode, isAuthed, getAuthParam } = useAppAuth();
   const upsertPrompt = useMutation(api.prompts.upsertMyPrompt);
   const clearPrompt = useMutation(api.prompts.clearMyPrompt);
   const wsRef = useRef<WebSocket | null>(null);
@@ -59,7 +59,7 @@ export function useWebSocket() {
   const connect = useCallback(async () => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
     if (wsRef.current?.readyState === WebSocket.CONNECTING) return;
-    if (!isLoaded || !isSignedIn) return;
+    if (!isAuthed) return;
 
     intentionalCloseRef.current = false;
 
@@ -71,11 +71,16 @@ export function useWebSocket() {
     setStatus("connected");
 
     try {
-      const token = await getToken();
+      const authParam = await getAuthParam();
+      if (!authParam) {
+        console.warn("[WS] No auth credential available; aborting connect");
+        setStatus("idle");
+        return;
+      }
       const language = useInterviewStore.getState().language;
       const planId = useInterviewStore.getState().planInfo?.plan_id ?? "free";
 
-      const ws = new WebSocket(`${WS_BASE}?lang=${language}&plan=${planId}&token=${token}`);
+      const ws = new WebSocket(`${WS_BASE}?lang=${language}&plan=${planId}&${authParam}`);
       wsRef.current = ws;
 
     ws.onopen = () => {
@@ -213,7 +218,7 @@ export function useWebSocket() {
     } catch (e) {
       console.error("[WS] Failed to get Clerk token or connect:", e);
     }
-  }, [setStatus, setTranscription, addResponseChunk, clearResponse, clearAll, setError, incrementQuestionsAnswered, archiveCurrentQA, mergePlanInfo, updateQuotas, setLiveTranscriptionRemaining, setCountdownActive, setSessionStartTime, getToken, isLoaded, isSignedIn]);
+  }, [setStatus, setTranscription, addResponseChunk, clearResponse, clearAll, setError, incrementQuestionsAnswered, archiveCurrentQA, mergePlanInfo, updateQuotas, setLiveTranscriptionRemaining, setCountdownActive, setSessionStartTime, getAuthParam, isAuthed]);
 
   useEffect(() => {
     connectRef.current = connect;
@@ -246,22 +251,28 @@ export function useWebSocket() {
     console.log("[WS] setPrompt called with:", prompt.substring(0, 50) + "...");
     const language = useInterviewStore.getState().language as Language;
     useInterviewStore.getState().setCustomPrompt(language, prompt);
-    void upsertPrompt({ lang: language, promptText: prompt }).catch((err) =>
-      console.error("[WS] Failed to persist prompt to Convex:", err),
-    );
+    // Key-mode has no Clerk JWT, so the Convex mutation would fail; the prompt
+    // still applies for the live session via the WS command + local store.
+    if (mode !== "key") {
+      void upsertPrompt({ lang: language, promptText: prompt }).catch((err) =>
+        console.error("[WS] Failed to persist prompt to Convex:", err),
+      );
+    }
     send(`set_prompt:${prompt}`);
-  }, [send, upsertPrompt]);
+  }, [send, upsertPrompt, mode]);
 
   const restoreDefaultPrompt = useCallback(() => {
     console.log("[WS] restoreDefaultPrompt called");
     send("clear_prompt");
     const language = useInterviewStore.getState().language as Language;
     useInterviewStore.getState().clearCustomPrompt(language);
-    void clearPrompt({ lang: language }).catch((err) =>
-      console.error("[WS] Failed to clear prompt in Convex:", err),
-    );
+    if (mode !== "key") {
+      void clearPrompt({ lang: language }).catch((err) =>
+        console.error("[WS] Failed to clear prompt in Convex:", err),
+      );
+    }
     console.log("[WS] Zustand store cleared for language:", language);
-  }, [send, clearPrompt]);
+  }, [send, clearPrompt, mode]);
 
   const changeLanguage = useCallback((language: string) => {
     send(`set_language:${language}`);

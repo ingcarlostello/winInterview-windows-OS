@@ -6,6 +6,7 @@ import {
   PLAN_FEATURES,
   type PlanId,
 } from "./constants";
+import { generateUserKey } from "./lib/userKey";
 
 function buildFeatureFlags(planId: PlanId): Record<string, boolean> {
   const flags = {
@@ -107,6 +108,11 @@ export const storeUser = mutation({
       if (identity.pictureUrl !== undefined && user.imageUrl !== identity.pictureUrl) {
         updates.imageUrl = identity.pictureUrl;
       }
+      // Lazy backfill: existing users created before userKey existed get one
+      // the next time they sign in (dashboard or desktop app).
+      if (user.userKey === undefined) {
+        updates.userKey = generateUserKey();
+      }
       if (Object.keys(updates).length > 0) {
         await ctx.db.patch(user._id, updates);
       }
@@ -120,6 +126,7 @@ export const storeUser = mutation({
       imageUrl: identity.pictureUrl,
       planId: "free",
       tokenIdentifier: identity.tokenIdentifier,
+      userKey: generateUserKey(),
     });
 
     const month = new Date().toISOString().slice(0, 7);
@@ -413,6 +420,7 @@ export const createUserFromClerk = internalMutation({
       name: args.name,
       imageUrl: args.imageUrl,
       planId: "free",
+      userKey: generateUserKey(),
     });
 
     const month = new Date().toISOString().slice(0, 7);
@@ -426,5 +434,70 @@ export const createUserFromClerk = internalMutation({
     });
 
     return newUserId;
+  },
+});
+
+// Public: called by the web dashboard's UserKeyCard to rotate the access key.
+// Returns the freshly generated key string so the UI can display it.
+export const regenerateUserKey = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Called regenerateUserKey without authentication present");
+    }
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_token", (q) =>
+        q.eq("tokenIdentifier", identity.tokenIdentifier)
+      )
+      .unique();
+
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    const userKey = generateUserKey();
+    await ctx.db.patch(user._id, { userKey });
+    return userKey;
+  },
+});
+
+// Internal: resolves a desktop access key to its owner's clerkId. Called by the
+// Python backend (via the getUserByKeyAction HTTP action) to authenticate a
+// desktop session that logged in with a pasted key instead of a Clerk JWT.
+export const getUserByKey = internalQuery({
+  args: {
+    userKey: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_user_key", (q) => q.eq("userKey", args.userKey))
+      .unique();
+
+    if (!user) {
+      return null;
+    }
+
+    return { clerkId: user.clerkId };
+  },
+});
+
+// Internal: one-time backfill to assign a userKey to any user that predates the
+// field. Run once per deployment with `npx convex run users:backfillUserKeys`.
+export const backfillUserKeys = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const users = await ctx.db.query("users").collect();
+    let updated = 0;
+    for (const user of users) {
+      if (user.userKey === undefined) {
+        await ctx.db.patch(user._id, { userKey: generateUserKey() });
+        updated++;
+      }
+    }
+    return { scanned: users.length, updated };
   },
 });

@@ -111,7 +111,10 @@ export type TranslationKey =
   | "btnLogout"
   | "upgradeSuccess"
   | "upgradeFallback"
-  | "thinkingMode";
+  | "thinkingMode"
+  | "keyLoginLabel"
+  | "keyLoginSubmit"
+  | "keyLoginInvalid";
 
 const translations: Record<Language, Record<TranslationKey, string>> = {
   es: {
@@ -228,6 +231,9 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     upgradeSuccess: "¡Suscripción activada! Tu plan {plan} está listo.",
     upgradeFallback: "Si completaste tu compra y no ves los cambios, cierra sesión y vuelve a iniciar sesión.",
     thinkingMode: "Modo pensamiento",
+    keyLoginLabel: "O pega tu clave de acceso",
+    keyLoginSubmit: "Entrar",
+    keyLoginInvalid: "Clave inválida (debe empezar con wik_).",
   },
   en: {
     statusDisconnected: "Disconnected",
@@ -343,6 +349,9 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     upgradeSuccess: "Subscription activated! Your {plan} plan is ready.",
     upgradeFallback: "If you completed your purchase and don't see changes, sign out and sign back in.",
     thinkingMode: "Thinking mode",
+    keyLoginLabel: "Or paste your access key",
+    keyLoginSubmit: "Enter",
+    keyLoginInvalid: "Invalid key (must start with wik_).",
   },
 };
 

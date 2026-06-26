@@ -2,9 +2,15 @@ import { useEffect, useRef } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useInterviewStore } from "../stores/interview";
+import { useAppAuth } from "./useAppAuth";
 
 export function usePromptSync() {
-  const convexPrompts = useQuery(api.prompts.getMyPrompts);
+  const { mode } = useAppAuth();
+  // Key-mode has no Clerk JWT; prompts are seeded server-side at session start.
+  const convexPrompts = useQuery(
+    api.prompts.getMyPrompts,
+    mode === "key" ? "skip" : {}
+  );
   const setCustomPrompt = useInterviewStore((s) => s.setCustomPrompt);
   const hydratedRef = useRef<Record<string, boolean>>({ es: false, en: false });
 

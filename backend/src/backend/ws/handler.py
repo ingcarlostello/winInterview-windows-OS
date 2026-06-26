@@ -24,19 +24,9 @@ async def websocket_endpoint(
     manager: ConnectionManager = Depends(get_connection_manager),
 ) -> None:
     token = websocket.query_params.get("token")
-    if not token:
-        await websocket.close(code=1008, reason="Missing token")
-        return
-
-    try:
-        from backend.auth.clerk import verify_clerk_token
-        payload = verify_clerk_token(token)
-        clerk_id = payload.get("sub")
-        if not clerk_id:
-            raise ValueError("Token missing subject")
-    except Exception as e:
-        logger.error(f"Token validation failed: {e}")
-        await websocket.close(code=1008, reason="Invalid token")
+    key = websocket.query_params.get("key")
+    if not token and not key:
+        await websocket.close(code=1008, reason="Missing token or key")
         return
 
     session_id = str(uuid.uuid4())[:8]
@@ -45,11 +35,40 @@ async def websocket_endpoint(
         initial_language = "es"
 
     convex_client = ConvexClient()
+    clerk_id: str | None = None
+    user_data = None
+
+    if key:
+        # Desktop key-login: resolve the key to its owner + plan/quota in one call.
+        try:
+            resolved = await convex_client.get_user_by_key(key)
+        except Exception as e:
+            logger.error(f"Key validation failed for session {session_id}: {e}")
+            await websocket.close(code=1008, reason="Invalid key")
+            return
+        if not resolved:
+            await websocket.close(code=1008, reason="Invalid key")
+            return
+        clerk_id, user_data = resolved
+    else:
+        # Clerk JWT login (browser/desktop Clerk session).
+        try:
+            from backend.auth.clerk import verify_clerk_token
+            payload = verify_clerk_token(token)
+            clerk_id = payload.get("sub")
+            if not clerk_id:
+                raise ValueError("Token missing subject")
+        except Exception as e:
+            logger.error(f"Token validation failed: {e}")
+            await websocket.close(code=1008, reason="Invalid token")
+            return
+
     plan_id = PlanId.LITE
     remaining = None
     custom_prompt: str | None = None
     try:
-        user_data = await convex_client.get_user_and_quota(clerk_id)
+        if user_data is None:
+            user_data = await convex_client.get_user_and_quota(clerk_id)
         if user_data:
             plan_id = user_data.plan_id
             remaining = user_data.remaining

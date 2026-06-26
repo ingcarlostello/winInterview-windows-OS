@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Loader2, AlertCircle, RotateCcw } from "lucide-react";
-import { useAuth } from "@clerk/clerk-react";
+import { useAppAuth } from "../hooks/useAppAuth";
 import { useTranslation } from "../hooks/useTranslation";
 
 const AUTH_TIMEOUT_MS = 10_000;
@@ -8,17 +8,17 @@ const AUTH_TIMEOUT_MS = 10_000;
 type AuthState = "loading" | "error";
 
 export default function AuthGate({ children }: { children: React.ReactNode }) {
-  const { isLoaded } = useAuth();
+  const { isReady } = useAppAuth();
   const { t } = useTranslation();
   const [timedOut, setTimedOut] = useState(false);
 
   useEffect(() => {
-    if (isLoaded) return;
+    if (isReady) return;
     const id = setTimeout(() => setTimedOut(true), AUTH_TIMEOUT_MS);
     return () => clearTimeout(id);
-  }, [isLoaded]);
+  }, [isReady]);
 
-  if (!isLoaded) {
+  if (!isReady) {
     const state: AuthState = timedOut ? "error" : "loading";
 
     return (

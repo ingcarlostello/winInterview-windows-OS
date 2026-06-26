@@ -5,13 +5,14 @@ import { createSettingsSlice, type SettingsSlice } from "./slices/settingsSlice"
 import { createScreenSlice, type ScreenSlice } from "./slices/screenSlice";
 import { createPlanSlice, type PlanSlice } from "./slices/planSlice";
 import { createUISlice, type UISlice } from "./slices/uiSlice";
+import { createAuthSlice, type AuthSlice } from "./slices/authSlice";
 
 export type { Status, QAEntry } from "./slices/sessionSlice";
 export type { Language, Theme } from "./slices/settingsSlice";
 export type { PlanId, FeatureFlags, QuotaInfo, PlanInfo, PendingUpgrade } from "./slices/planSlice";
 export type { ToastType, ToastState } from "./slices/uiSlice";
 
-export interface RootState extends SessionSlice, SettingsSlice, ScreenSlice, PlanSlice, UISlice {
+export interface RootState extends SessionSlice, SettingsSlice, ScreenSlice, PlanSlice, UISlice, AuthSlice {
   reset: () => void;
 }
 
@@ -23,6 +24,7 @@ export const useInterviewStore = create<RootState>()(
       ...createScreenSlice(...a),
       ...createPlanSlice(...a),
       ...createUISlice(...a),
+      ...createAuthSlice(...a),
       reset: () => {
         const set = a[0];
         set({
@@ -48,6 +50,7 @@ export const useInterviewStore = create<RootState>()(
         language: state.language,
         theme: state.theme,
         pendingUpgrade: state.pendingUpgrade,
+        userKey: state.userKey,
       }),
       migrate: (persistedState: unknown) => {
         if (persistedState && typeof persistedState === "object") {

@@ -15,11 +15,13 @@ export default defineSchema({
     paddleCancelUrl: v.optional(v.string()),
     paddleUpdatePaymentUrl: v.optional(v.string()),
     subscriptionCurrentPeriodEnd: v.optional(v.string()),
+    userKey: v.optional(v.string()),
   })
     .index("by_token", ["tokenIdentifier"])
     .index("by_clerk_id", ["clerkId"])
     .index("by_paddle_customer", ["paddleCustomerId"])
-    .index("by_paddle_subscription", ["paddleSubscriptionId"]),
+    .index("by_paddle_subscription", ["paddleSubscriptionId"])
+    .index("by_user_key", ["userKey"]),
 
   prompts: defineTable({
     userId: v.id("users"),
