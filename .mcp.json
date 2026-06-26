@@ -1,0 +1,35 @@
+{
+  "mcpServers": {
+    "convex": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "convex@latest",
+        "mcp",
+        "start",
+        "--project-dir",
+        "C:/Users/react/OneDrive/Desktop/win-interview/winInterview-windows-OS"
+      ],
+      "env": {}
+    },
+    "clerk": {
+      "type": "http",
+      "url": "https://mcp.clerk.com/mcp"
+    },
+    "paddle-live": {
+      "type": "http",
+      "url": "https://mcp.paddle.com/mcp",
+      "headers": {
+        "Authorization": "Bearer pdl_live_apikey_01kvc4x0ez41jh7hq3rhkn8eae_66Nf2jYP2KaxtTyS2XycW9_AZk"
+      }
+    },
+    "paddle-sandbox": {
+      "type": "http",
+      "url": "https://sandbox-mcp.paddle.com/mcp",
+      "headers": {
+        "Authorization": "Bearer PADDLE_SANDBOX_API_KEY_HERE"
+      }
+    }
+  }
+}
