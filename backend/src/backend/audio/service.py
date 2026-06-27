@@ -37,8 +37,14 @@ class AudioStreamingService:
 
     async def start(self) -> bool:
         agent_started = self.agent.start(self._on_agent_message)
+        if not agent_started:
+            return False
 
-        if not agent_started or not self.agent.wait_until_ready(timeout=15):
+        if not self.agent.wait_until_ready(timeout=15):
+            self.agent.last_error = (
+                self.agent.last_error
+                or "Tiempo de espera agotado conectando con el servicio de transcripción."
+            )
             return False
 
         self._capture.set_handlers(on_audio_frame=self._on_audio_frame)

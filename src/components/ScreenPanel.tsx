@@ -143,6 +143,12 @@ export default function ScreenPanel() {
     clearScreen();
   }, [clearScreen]);
 
+  const handleCopy = useCallback(async () => {
+    if (responseText) {
+      await navigator.clipboard.writeText(responseText);
+    }
+  }, [responseText]);
+
   return (
     <div className="h-full flex flex-col glass-base border-l border-white/10">
       {/* Header */}
@@ -273,21 +279,18 @@ export default function ScreenPanel() {
                       className={thinkingEnabled ? "text-accent" : "text-white/40"}
                     />
                     <span
-                      className={`text-[10px] font-medium ${
-                        thinkingEnabled ? "text-accent" : "text-white/40"
-                      }`}
+                      className={`text-[10px] font-medium ${thinkingEnabled ? "text-accent" : "text-white/40"
+                        }`}
                     >
                       {t("thinkingMode")}
                     </span>
                     <span
-                      className={`ml-auto w-8 h-4 rounded-full transition-colors relative ${
-                        thinkingEnabled ? "bg-accent" : "bg-white/15"
-                      }`}
+                      className={`ml-auto w-8 h-4 rounded-full transition-colors relative ${thinkingEnabled ? "bg-accent" : "bg-white/15"
+                        }`}
                     >
                       <span
-                        className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${
-                          thinkingEnabled ? "left-4" : "left-0.5"
-                        }`}
+                        className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${thinkingEnabled ? "left-4" : "left-0.5"
+                          }`}
                       />
                     </span>
                   </button>
@@ -326,16 +329,31 @@ export default function ScreenPanel() {
         {/* Solution Section - glass container */}
         {hasAnalysis && (
           <div className="flex-1 flex flex-col min-h-0">
-            <div className="flex items-center gap-1.5 mb-2 shrink-0">
-              <Sparkles className="text-accent" size={12} />
-              <span className="text-accent text-[10px] font-semibold uppercase tracking-wider">
-                {t("solution")}
-              </span>
+            <div className="flex items-center justify-between mb-2 shrink-0">
+              <div className="flex items-center gap-1.5">
+                <Sparkles className="text-accent" size={12} />
+                <span className="text-accent text-[10px] font-semibold uppercase tracking-wider">
+                  {t("solution")}
+                </span>
+              </div>
+              {responseText && (
+                <button
+                  type="button"
+                  onClick={handleCopy}
+                  className="flex items-center gap-1 text-[10px] text-white/40 hover:text-white/70 transition-colors cursor-pointer"
+                >
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="9" y="9" width="13" height="13" rx="2" />
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                  </svg>
+                  {t("btnCopy")}
+                </button>
+              )}
             </div>
 
             <div className="flex-1 border border-white/10 rounded-xl overflow-hidden min-h-0">
               <div className="h-full overflow-y-auto scrollbar-thin p-3">
-                <div className="text-white/85 text-xs leading-relaxed prose prose-invert prose-xs max-w-none mb-12">
+                <div className="text-white/85 text-xs leading-relaxed prose prose-invert prose-xs max-w-none mb-12 select-text">
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
                     components={{

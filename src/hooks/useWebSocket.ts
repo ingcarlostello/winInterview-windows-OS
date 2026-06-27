@@ -11,6 +11,14 @@ import { useAppAuth } from "./useAppAuth";
 
 const WS_BASE = "ws://localhost:8000/ws";
 
+// Reconnect policy: bounded exponential backoff instead of hammering every 3s.
+const MAX_RECONNECT_ATTEMPTS = 5;
+const BASE_RECONNECT_DELAY = 3000;
+const MAX_RECONNECT_DELAY = 30000;
+// Backend closes with 1008 (policy violation) for missing/invalid token or key.
+// Retrying that is pointless — surface the error and stop.
+const WS_FATAL_CLOSE_CODE = 1008;
+
 interface WSMessage {
   type: string;
   data: Record<string, string>;
@@ -22,6 +30,8 @@ export function useWebSocket() {
   const clearPrompt = useMutation(api.prompts.clearMyPrompt);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectAttemptsRef = useRef(0);
+  const errorReceivedRef = useRef(false);
   const mountedRef = useRef(true);
   const intentionalCloseRef = useRef(false);
   const prevStatusRef = useRef<Status>("idle");
@@ -62,6 +72,7 @@ export function useWebSocket() {
     if (!isAuthed) return;
 
     intentionalCloseRef.current = false;
+    errorReceivedRef.current = false;
 
     if (reconnectTimerRef.current) {
       clearTimeout(reconnectTimerRef.current);
@@ -86,6 +97,8 @@ export function useWebSocket() {
     ws.onopen = () => {
       setStatus("connected");
       setSessionStartTime(Date.now());
+      reconnectAttemptsRef.current = 0;
+      errorReceivedRef.current = false;
     };
 
     ws.onmessage = (event) => {
@@ -163,6 +176,7 @@ export function useWebSocket() {
             addResponseChunk(msg.data.content);
             break;
           case WS_MESSAGE_TYPE.ERROR:
+            errorReceivedRef.current = true;
             setError(msg.data.message);
             break;
           case WS_MESSAGE_TYPE.PLAN_INFO: {
@@ -200,16 +214,51 @@ export function useWebSocket() {
       }
     };
 
-    ws.onclose = () => {
-      setStatus("idle");
+    ws.onclose = (event) => {
       setSessionStartTime(null);
-      if (mountedRef.current && !intentionalCloseRef.current) {
-        reconnectTimerRef.current = setTimeout(() => {
-          if (wsRef.current?.readyState !== WebSocket.OPEN) {
-            connectRef.current();
-          }
-        }, 3000);
+
+      // Cierre intencional (el usuario pulsó "Finalizar") o componente desmontado.
+      if (intentionalCloseRef.current || !mountedRef.current) {
+        setStatus("idle");
+        reconnectAttemptsRef.current = 0;
+        return;
       }
+
+      // Cierre fatal de autenticación: token/clave inválidos o ausentes (code 1008).
+      // Reintentar no sirve; mostramos el error y paramos el bucle.
+      if (event.code === WS_FATAL_CLOSE_CODE) {
+        setError(event.reason || "Sesión o clave inválida. Vuelve a iniciar sesión.");
+        setStatus("error");
+        reconnectAttemptsRef.current = 0;
+        return;
+      }
+
+      // Agotados los reintentos: surface un error claro en vez de seguir ciclando.
+      if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
+        if (!errorReceivedRef.current) {
+          setError("No se pudo conectar al servicio de transcripción. Revisa tu conexión e inténtalo de nuevo.");
+        }
+        setStatus("error");
+        reconnectAttemptsRef.current = 0;
+        return;
+      }
+
+      // Conserva el estado/mensaje de error que el backend ya envió (p. ej. fallo
+      // de Deepgram); en cortes transitorios sin error explícito, vuelve a idle.
+      if (!errorReceivedRef.current) {
+        setStatus("idle");
+      }
+
+      const delay = Math.min(
+        BASE_RECONNECT_DELAY * 2 ** reconnectAttemptsRef.current,
+        MAX_RECONNECT_DELAY,
+      );
+      reconnectAttemptsRef.current += 1;
+      reconnectTimerRef.current = setTimeout(() => {
+        if (wsRef.current?.readyState !== WebSocket.OPEN) {
+          connectRef.current();
+        }
+      }, delay);
     };
 
     ws.onerror = () => {

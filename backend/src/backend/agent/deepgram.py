@@ -28,6 +28,8 @@ class DeepgramAgent:
         self._is_closed = False
         self._intentional_stop = False
         self.on_closed: Callable[[], None] | None = None
+        # Último error legible al arrancar el agente, para mostrarlo en el frontend.
+        self.last_error: str | None = None
 
     @property
     def is_closed(self) -> bool:
@@ -38,6 +40,7 @@ class DeepgramAgent:
             self._ready_event.clear()
             self._is_closed = False
             self._intentional_stop = False
+            self.last_error = None
             self._ctx = self._client.agent.v1.connect()
             self._conn = self._ctx.__enter__()
 
@@ -54,9 +57,20 @@ class DeepgramAgent:
 
             return True
         except Exception as e:
+            self.last_error = self._friendly_error(e)
             logger.error("Failed to start Deepgram agent: %s", e, exc_info=True)
             self._cleanup()
             return False
+
+    @staticmethod
+    def _friendly_error(e: Exception) -> str:
+        """Traduce el error crudo de Deepgram a un mensaje accionable para el usuario."""
+        text = str(e)
+        if "401" in text or "Unauthorized" in text:
+            return "Autenticación de Deepgram fallida — revisa DEEPGRAM_API_KEY."
+        if "getaddrinfo failed" in text or "11001" in text or "Name or service not known" in text:
+            return "No se alcanza el servicio de transcripción — revisa tu conexión a internet."
+        return f"No se pudo iniciar la transcripción: {text}"
 
     def _on_close(self, _event: Any) -> None:
         self._is_closed = True

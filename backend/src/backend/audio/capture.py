@@ -1,9 +1,12 @@
 import asyncio
+import logging
 import threading
 from collections.abc import Callable
 
 import numpy as np
 import sounddevice as sd
+
+logger = logging.getLogger(__name__)
 
 
 class AudioCapture:
@@ -36,10 +39,12 @@ class AudioCapture:
                 blocksize=self.FRAME_SIZE,
             )
             self._stream.start()
-        except Exception:
+        except Exception as e:
+            logger.error("Failed to open audio input device: %s", e)
             return
 
         self._running = True
+        self._silence_warnings = 0
         self._loop_task = asyncio.create_task(self._capture_loop())
 
     async def stop(self) -> None:
@@ -68,15 +73,21 @@ class AudioCapture:
                 with self._stream_lock:
                     if self._stream:
                         data, _ = self._stream.read(self.FRAME_SIZE)
-                        return data.tobytes()
-                    return None
+                        peak = int(np.abs(data).max())
+                        return data.tobytes(), peak
+                    return None, 0
 
             try:
-                frame = await loop.run_in_executor(None, _read_chunk)
-                if frame is None:
+                result = await loop.run_in_executor(None, _read_chunk)
+                if result is None:
                     break
+                frame, peak = result
             except Exception:
                 break
+
+            if peak < 200 and self._silence_warnings < 3:
+                self._silence_warnings += 1
+                logger.warning("Audio level very low (peak=%d). Check microphone volume and proximity.", peak)
 
             try:
                 if self._on_audio_frame:
