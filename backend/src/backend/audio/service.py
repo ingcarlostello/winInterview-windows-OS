@@ -4,9 +4,19 @@ import time
 from typing import Any, Awaitable, Callable
 
 from backend.agent.deepgram import DeepgramAgent
-from backend.audio.capture import AudioCapture
+from backend.audio.capture import AudioCapture, MixedAudioCapture, SystemAudioCapture
 
 logger = logging.getLogger(__name__)
+
+
+def _make_capture(audio_source: str):
+    """Construye la captura según la fuente: micrófono (default), audio del
+    sistema (loopback WASAPI) o ambos mezclados."""
+    if audio_source == "system":
+        return SystemAudioCapture()
+    if audio_source == "both":
+        return MixedAudioCapture()
+    return AudioCapture()
 
 
 class AudioStreamingService:
@@ -16,13 +26,19 @@ class AudioStreamingService:
     delegating transcription events to coordinator callbacks.
     """
 
-    def __init__(self, language: str, loop: asyncio.AbstractEventLoop) -> None:
+    def __init__(
+        self,
+        language: str,
+        loop: asyncio.AbstractEventLoop,
+        audio_source: str = "mic",
+    ) -> None:
         self._language = language
         self._loop = loop
+        self._audio_source = audio_source
 
         self.agent = DeepgramAgent(language=language)
         self.agent.on_closed = self._on_agent_closed
-        self._capture = AudioCapture()
+        self._capture = _make_capture(audio_source)
         self._is_paused = False
         self._speech_start_time: float | None = None
         self._accumulated_speech_duration: float = 0.0

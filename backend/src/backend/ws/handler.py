@@ -9,7 +9,7 @@ from backend.dependencies import get_connection_manager, get_llm_service, get_vi
 from backend.llm.protocol import LLMService
 from backend.llm.vision import VisionLLMService
 from backend.plan_gate import PlanGate
-from backend.tiers import PlanId
+from backend.tiers import Feature, PlanId
 from backend.ws.command_parser import create_default_parser
 from backend.ws.session import AgentSession
 from backend.ws_manager import ConnectionManager
@@ -91,6 +91,19 @@ async def websocket_endpoint(
         convex_client=convex_client,
     )
 
+    # Audio source: mic-only is the default and is always allowed. Capturing the
+    # system audio (loopback) and mixing both are Ultra-only features; if the plan
+    # lacks them we silently fall back to mic (same pattern as thinking_mode).
+    audio_source = websocket.query_params.get("audio_source", "mic")
+    if audio_source not in ("mic", "system", "both"):
+        audio_source = "mic"
+    if audio_source == "system" and not plan_gate.can_use_feature(Feature.SYSTEM_AUDIO_CAPTURE):
+        logger.info(f"Session {session_id} requested system audio but plan {plan_id.value} lacks it; using mic")
+        audio_source = "mic"
+    elif audio_source == "both" and not plan_gate.can_use_feature(Feature.SIMULTANEOUS_AUDIO):
+        logger.info(f"Session {session_id} requested mixed audio but plan {plan_id.value} lacks it; using mic")
+        audio_source = "mic"
+
     session = AgentSession(
         session_id=session_id,
         websocket=websocket,
@@ -100,6 +113,7 @@ async def websocket_endpoint(
         plan_gate=plan_gate,
         initial_language=initial_language,
         custom_prompt=custom_prompt,
+        audio_source=audio_source,
     )
     
     if not await session.start():

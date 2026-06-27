@@ -88,6 +88,7 @@ class AgentSession:
         plan_gate: PlanGate,
         initial_language: str = "es",
         custom_prompt: str | None = None,
+        audio_source: str = "mic",
         audio_service: AudioStreamingService | None = None,
         history: ConversationHistory | None = None,
     ) -> None:
@@ -110,7 +111,10 @@ class AgentSession:
             logger.info(f"Session {self.session_id} using default prompt for language '{self.language}'")
 
         self.history = history or ConversationHistory(self.language, custom_prompt)
-        self.audio = audio_service or AudioStreamingService(language=self.language, loop=self._loop)
+        self.audio = audio_service or AudioStreamingService(
+            language=self.language, loop=self._loop, audio_source=audio_source
+        )
+        logger.info(f"Session {self.session_id} audio source: '{audio_source}'")
 
         self.coordinator = DialogCoordinator(
             session_id=self.session_id,

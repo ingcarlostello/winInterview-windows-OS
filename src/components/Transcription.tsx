@@ -1,14 +1,19 @@
-import { MessageSquare, CircleDot } from "lucide-react";
+import { MessageSquare, CircleDot, Headphones } from "lucide-react";
 import { useInterviewStore } from "../stores/interview";
 import { useTranslation } from "../hooks/useTranslation";
+import { useFeatureGate } from "../hooks/useFeatureGate";
 
 export default function Transcription() {
   const transcription = useInterviewStore((s) => s.transcription);
   const status = useInterviewStore((s) => s.status);
   const { t } = useTranslation();
+  const { allowed: canUseSystemAudio } = useFeatureGate("system_audio_capture");
 
   const hasContent = !!transcription || status === "thinking";
   const charCount = transcription.length;
+  // Mic-only plans fail with headphones (the mic never hears the interviewer).
+  // Surface a visible hint while waiting so users don't think it's broken.
+  const showMicHint = !canUseSystemAudio && !hasContent;
 
   return (
     <div className="px-3 pb-2">
@@ -40,6 +45,14 @@ export default function Transcription() {
           </div>
         )}
       </div>
+      {showMicHint && (
+        <div className="flex items-start gap-1.5 mt-1.5 px-2 py-1.5 rounded-lg border border-amber/20 bg-amber/10">
+          <Headphones size={12} className="text-amber mt-0.5 shrink-0" />
+          <p className="text-[10px] leading-tight text-amber/80">
+            {t("audioSourceMicHint")}
+          </p>
+        </div>
+      )}
     </div>
   );
 }

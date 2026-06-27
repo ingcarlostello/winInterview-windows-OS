@@ -141,6 +141,7 @@ Actions: `setStatus`, `setLanguage`, `setTranscription`, `addResponseChunk`, `cl
 | `PromptEditor.tsx` | Collapsible editor. Textarea for custom prompt. Save button (triggers reconnect), Restore default button. Shows "Active prompt" indicator. Locked state with "Pro" badge when `!custom_prompts` |
 | `QuestionCounter.tsx` | Displays count of answered questions. Hidden when count is 0. Singular/plural handling via translations |
 | `LanguageSelector.tsx` | Dropdown selector for ES/EN with flag emojis. Click-outside-to-close behavior. Updates store language and sends WebSocket language change command |
+| `AudioSourceSelector.tsx` | Dropdown for mic/system/loopback audio source (Ultra-only). Shows icons + labels + descriptions. Locked with 🔒 badge for non-Ultra plans. Edit-only when disconnected (idle/error). Updates store audio source + sends `?audio_source=` in WebSocket URL |
 | `ScreenPanel.tsx` | Screen capture analysis panel. Thumbnail grid (max 4 captures). Capture button invokes Tauri `capture_screen` command. WebSocket connection to `ws://localhost:8000/api/ws/analyze-screens` for vision analysis. Prompt textarea for custom analysis instructions. Markdown-rendered solution output with syntax highlighting. Clear button. `custom_prompts` gate on textarea + analyze button with "Pro" badge + Lock icon; `thinking_mode` (Ultra-only) toggle with Brain icon + animated switch; `?plan=` param on WS URL |
 
 ### CSS
@@ -158,7 +159,9 @@ Actions: `setStatus`, `setLanguage`, `setTranscription`, `addResponseChunk`, `cl
 | `deepgram-sdk` | Deepgram Agent SDK (nova-3 for ASR only, linear16 encoding, 16kHz, smart_format, endpointing=1500ms) |
 | `openai` | OpenAI-compatible client for DeepSeek API and MiniMax |
 | `fastapi` | Web framework |
-| `pyaudio` | Audio capture from microphone |
+| `sounddevice` | Audio capture from microphone (16kHz, 16-bit mono) |
+| `soundcard` | System audio loopback capture via WASAPI (Windows only, Ultra plan feature) |
+| `numpy` | Audio frame processing, downmixing stereo to mono |
 | `pydantic-settings` | Configuration management |
 | `uvicorn[standard]` | ASGI server |
 | `websockets` | WebSocket exception handling |
@@ -196,19 +199,19 @@ Actions: `setStatus`, `setLanguage`, `setTranscription`, `addResponseChunk`, `cl
 | Module | Purpose |
 |---|---|
 | `config.py` | Pydantic settings: `deepgram_api_key`, `deepseek_api_key`, `minimax_api_key`, `host`, `port` |
-| `tiers.py` | `PlanId` (LITE/PRO/ULTRA), `Feature` (CUSTOM_PROMPTS, SIMULTANEOUS_CAPTURES, SIMULTANEOUS_ANALYSIS, KEYBOARD_SHORTCUTS, INVISIBLE_MODE, GHOST_MODE, THINKING_MODE), `Quota` (TRANSCRIPTION_SECONDS, SCREEN_CAPTURES, SCREEN_ANALYSES) enums. `PlanDefinition` dataclass. `PLANS` dict with per-plan features/quotas. Helper functions: `get_plan()`, `has_feature()`, `get_quota_limit()` |
+| `tiers.py` | `PlanId` (FREE/LITE/PRO/ULTRA), `Feature` (CUSTOM_PROMPTS, SIMULTANEOUS_CAPTURES, SIMULTANEOUS_ANALYSIS, KEYBOARD_SHORTCUTS, INVISIBLE_MODE, GHOST_MODE, THINKING_MODE, SYSTEM_AUDIO_CAPTURE, SIMULTANEOUS_AUDIO), `Quota` (TRANSCRIPTION_SECONDS, SCREEN_CAPTURES, SCREEN_ANALYSES) enums. `PlanDefinition` dataclass. `PLANS` dict with per-plan features/quotas. Helper functions: `get_plan()`, `has_feature()`, `get_quota_limit()`. **Ultra-only**: `SYSTEM_AUDIO_CAPTURE` (loopback WASAPI) and `SIMULTANEOUS_AUDIO` (mic+loopback mixed) |
 | `convex_client.py` | Authenticated HTTP client for the Python backend to call Convex HTTP actions (`/api/users/get`, `/api/quotas/decrement`) |
 | `plan_gate.py` | `FeatureBlockedError`, `QuotaExceededError` exceptions. `PlanGate` class: initializes usage from Convex remaining, enforces feature/quotas in-memory, and flushes consumption to Convex via `ConvexClient` |
 | `context.py` | `ConversationHistory` — message list management (system prompt + user/assistant messages, max 20, auto-trim). Used by `AgentSession` |
 | `dependencies.py` | DI singletons: `get_connection_manager()`, `get_llm_service()` (DeepSeekLLMService), `get_vision_service()` (VisionLLMService) |
 | `ws_manager.py` | `ConnectionManager` with typed sends using `WsMessageType`/`WsStatus` enums: `send_status`, `send_transcription`, `send_response_chunk`, `send_error`, `send_screen_chunk`, `send_screen_image` |
-| `ws/handler.py` | `websocket_endpoint` FastAPI handler. Verifies Clerk JWT from `?token=`, fetches plan/quotas from Convex via `ConvexClient`, creates `PlanGate`, and injects into `AgentSession`. Language/prompt come from query params. Uses `CommandParser` via `create_default_parser()` |
-| `ws/session.py` | `AgentSession` class (~240 lines). Pure coordinator: wires `AudioStreamingService` ↔ `ConversationHistory` ↔ LLM/Vision ↔ WebSocket. Accepts optional `audio_service`, `history` params for DI/testing. `DialogCoordinator` inner class handles business logic with `PlanGate` integration. `_send_plan_info()` on connect and after each flush. Feature gates on set/clear_prompt |
+| `ws/handler.py` | `websocket_endpoint` FastAPI handler. Verifies Clerk JWT from `?token=` (with 10s leeway tolerance for clock skew), fetches plan/quotas from Convex via `ConvexClient`, creates `PlanGate`, and injects into `AgentSession`. Language/prompt/`audio_source` come from query params. Silently enforces `audio_source="mic"` if plan lacks `SYSTEM_AUDIO_CAPTURE`/`SIMULTANEOUS_AUDIO` features (same pattern as `thinking_mode`). Uses `CommandParser` via `create_default_parser()` |
+| `ws/session.py` | `AgentSession` class (~240 lines). Pure coordinator: wires `AudioStreamingService` ↔ `ConversationHistory` ↔ LLM/Vision ↔ WebSocket. Accepts optional `audio_service`, `history`, `audio_source` params for DI/testing. `DialogCoordinator` inner class handles business logic with `PlanGate` integration. `_send_plan_info()` on connect and after each flush. Feature gates on set/clear_prompt. Logs audio source choice on session start |
 | `ws/commands.py` | `WsCommand` enum: PAUSE, RESUME, CLEAR, SET_LANGUAGE, SET_PROMPT, CLEAR_PROMPT, CAPTURE_SCREEN. `ParsedCommand` dataclass |
 | `ws/command_parser.py` | `CommandParser` with registry-based handler pattern. `ExactMatchHandler` (no-payload commands), `PrefixMatchHandler` (colon-delimited payload). `create_default_parser()` factory |
 | `ws/message_types.py` | `WsMessageType` enum (STATUS, TRANSCRIPTION, CHUNK, ERROR, SCREEN_CHUNK, SCREEN_IMAGE, PLAN_INFO, QUOTA_UPDATE) and `WsStatus` enum (CONNECTED, LISTENING, THINKING, RESPONDING, PAUSED, RECONNECTING, CLEARED, CAPTURING, ANALYZING, COMPLETED, PROMPT_SAVED, PROMPT_CLEARED, QUOTA_EXCEEDED, FEATURE_BLOCKED) |
-| `audio/capture.py` | PyAudio at 16kHz, 16-bit, mono, 20ms frames. Async capture loop with thread-safe stream access. `start()`/`stop()`/`close()` lifecycle |
-| `audio/service.py` | `AudioStreamingService` — owns PyAudio + Deepgram Agent lifecycle. Callback-driven (`on_transcription`, `on_user_started_speaking`, `on_agent_error`). Handles keepalive loop, pause/resume, language restart |
+| `audio/capture.py` | Three audio capture classes: `AudioCapture` (microphone via sounddevice, 16kHz, 16-bit, mono, 20ms frames, async loop); `SystemAudioCapture` (Windows WASAPI loopback via soundcard, Ultra-only, daemon thread with COM initialization); `MixedAudioCapture` (parallel mic + loopback with int32 anti-clip mixing). All share `set_handlers()` / `start()` / `stop()` / `close()` interface |
+| `audio/service.py` | `AudioStreamingService` — owns audio capture (`AudioCapture`, `SystemAudioCapture`, or `MixedAudioCapture`) + Deepgram Agent lifecycle. Accepts `audio_source: "mic" | "system" | "both"` parameter. Callback-driven (`on_transcription`, `on_user_started_speaking`, `on_agent_error`). Handles keepalive loop, pause/resume, language restart |
 | `agent/deepgram.py` | `DeepgramAgent` class. Wraps Deepgram SDK v7+ Agent API. `nova-3` model. `send_media()` for PCM frames. `keep_alive()` sends keepalive + dummy audio |
 | `llm/prompt.py` | Default system prompts for ES/EN. Custom prompt CRUD via `prompts.json` file |
 | `llm/protocol.py` | `LLMService` Protocol with `stream_response()` async iterator interface |
@@ -470,6 +473,54 @@ Claude Code can access these external services via MCP for development:
 
 ---
 
+## System Audio Capture (Windows, Ultra-only)
+
+### Overview
+
+The app can now capture **system audio (WASAPI loopback)** on Windows for Ultra-plan users, enabling high-quality transcription of the interviewer's voice even when using headphones.
+
+### Architecture
+
+**Problem solved**: Microphone-only capture fails with headphones — the interviewer's voice reaches the headphones but never enters the microphone. System audio loopback captures the **digital stream** before it plays, regardless of output device.
+
+**Three capture modes** (via `audio_source` query param):
+1. **`"mic"`** (default, all plans) — Microphone only, 16kHz mono via `sounddevice` + `AudioCapture`
+2. **`"system"`** (Ultra-only) — Windows WASAPI loopback via `soundcard` + `SystemAudioCapture`, 16kHz mono after stereo→mono downmix
+3. **`"both"`** (Ultra-only) — Parallel mic + loopback, mixed with anti-clip in `MixedAudioCapture`
+
+**Audio pipeline**:
+- `AudioCapture` (mic): sounddevice → 16kHz int16 mono, 20ms frames, async loop
+- `SystemAudioCapture` (loopback): soundcard → 16kHz float32 stereo → downmix to int16 mono in daemon thread (COM initialized per Windows WASAPI requirements)
+- `MixedAudioCapture` (both): two bounded queues + mixer thread (anchored to mic rhythm) → int32 sum with `np.clip(-32768, 32767)` anti-clip → int16 stereo
+- All three → Deepgram (nova-3, 16kHz, mono, no changes to ASR pipeline)
+
+### Feature Gating
+
+- `Feature.SYSTEM_AUDIO_CAPTURE` — gates loopback access (Ultra-only)
+- `Feature.SIMULTANEOUS_AUDIO` — gates mixed capture (Ultra-only)
+- Free/Lite/Pro users are silently downgraded to `audio_source="mic"` in `ws/handler.py` if they request `"system"` or `"both"`
+- Frontend shows locked button + "Ultra plan" tooltip; yellow hint below transcription warns mic-only users about headphone limitation
+
+### Frontend (`AudioSourceSelector.tsx`, `StatusBar.tsx`, `Transcription.tsx`)
+
+- **Selector**: Dropdown in StatusBar with mic/system/both icons + descriptions. Locked (🔒) for non-Ultra plans. Edit-only when `status === "idle" || "error"` (source is read at WS connect time)
+- **Yellow hint**: Shows below transcription when plan lacks `system_audio_capture` and transcription is empty: *"🎧 Microphone mode: use speaker (not headphones) to capture interviewer. Upgrade to Ultra."*
+
+### Bug Fixes (2026-06-27)
+
+1. **JWT Clock Skew** (`backend/src/backend/auth/clerk.py`):
+   - Added `leeway=datetime.timedelta(seconds=10)` to `jwt.decode()`
+   - Tolerates up to 10s desynchronization between Clerk issuer and backend (RFC 7519 standard)
+   - Prevents "token not yet valid (iat)" 403 errors on immediate reconnection
+
+2. **COM Not Initialized** (`backend/src/backend/audio/capture.py`):
+   - `SystemAudioCapture._capture_thread()` now calls `ctypes.windll.ole32.CoInitialize(None)` at start
+   - Calls `CoUninitialize()` in `finally` block to clean up
+   - Required because `soundcard` uses Windows COM API (WASAPI); COM must be initialized per-thread
+   - Fixes `Error 0x800401f0 (CO_E_NOTINITIALIZED)` that prevented loopback from starting
+
+---
+
 ## Windows Development Setup
 
 ### Environment
@@ -490,15 +541,27 @@ Windows has a built-in alias that redirects `python` to the Microsoft Store app,
 2. Poetry scripts are at: `C:\Users\react\AppData\Local\Programs\Python\Python314\Scripts`
 3. Before running Poetry or Python commands, the script files (`start-backend.ps1`, `start-frontend.ps1`) explicitly reorder PATH to prioritize Python 3.14 and remove the WindowsApps alias
 
-### Audio Capture: PyAudio → sounddevice
+### Audio Capture: sounddevice (microphone) + soundcard (system loopback)
 
-**Problem**: `pyaudio` requires compiling C extensions against PortAudio, which fails even with Visual Studio Build Tools installed on Windows.
-
-**Solution**: Replaced `pyaudio (>=0.2.14)` with `sounddevice (>=0.4.6)` in `backend/pyproject.toml`. sounddevice:
-- Is pure Python with precompiled wheels (no build step)
-- Provides the same audio capture interface via NumPy arrays
+**Microphone** (`sounddevice >=0.4.6`):
+- Pure Python with precompiled wheels (no build step)
+- Provides NumPy array interface
 - Works out-of-the-box on Windows, macOS, Linux
-- Backend code in `audio/capture.py` and `audio/service.py` will need minimal updates to use sounddevice API instead of PyAudio
+- `AudioCapture` class in `audio/capture.py` — 16kHz, 16-bit, mono, 20ms frames, async loop
+
+**System audio loopback** (`soundcard >=0.4.3`, Windows-only):
+- cffi-based, no native compilation, compatible with Python ≥3.14
+- Uses Windows WASAPI API to capture the digital stream sent to speakers/headphones
+- `SystemAudioCapture` class — captures stereo, downmixes to 16kHz int16 mono in daemon thread
+- **Requires** COM initialization per thread (`CoInitialize` / `CoUninitialize`)
+- Ultra plan feature (gated by `Feature.SYSTEM_AUDIO_CAPTURE`)
+- Known limitation: captures ALL system audio (not just Zoom), not per-process yet
+
+**Mixed capture** (`MixedAudioCapture`):
+- Runs mic + loopback in parallel, sums PCM int16 with anti-clip in mixer thread
+- Anchored to microphone rhythm (blocking read on mic, non-blocking on system with silence fallback)
+- For users who want both their voice + interviewer captured in one stream
+- Ultra plan feature (gated by `Feature.SIMULTANEOUS_AUDIO`)
 
 ### Startup Scripts
 

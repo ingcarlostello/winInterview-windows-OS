@@ -1,3 +1,4 @@
+import datetime
 import jwt
 from jwt import PyJWKClient
 from typing import Dict, Any
@@ -26,11 +27,13 @@ def verify_clerk_token(token: str) -> Dict[str, Any]:
     
     # Clerk tokens usually have an 'azp' (Authorized Party) indicating the frontend URL,
     # but for simplicity we skip audience validation or configure it properly based on the environment.
+    # Add leeway of 10 seconds to tolerate clock skew between Clerk issuer and this backend.
     payload = jwt.decode(
         token,
         signing_key.key,
         algorithms=["RS256"],
-        options={"verify_aud": False} # Set to True and provide audience if strict validation needed
+        options={"verify_aud": False},
+        leeway=datetime.timedelta(seconds=10),
     )
     
     return payload
