@@ -17,6 +17,8 @@ class Feature(StrEnum):
     INVISIBLE_MODE = "invisible_mode"
     GHOST_MODE = "ghost_mode"
     THINKING_MODE = "thinking_mode"
+    SYSTEM_AUDIO_CAPTURE = "system_audio_capture"
+    SIMULTANEOUS_AUDIO = "simultaneous_audio"
 
 
 class Quota(StrEnum):
@@ -85,6 +87,8 @@ PLANS: dict[PlanId, PlanDefinition] = {
             Feature.INVISIBLE_MODE,
             Feature.GHOST_MODE,
             Feature.THINKING_MODE,
+            Feature.SYSTEM_AUDIO_CAPTURE,
+            Feature.SIMULTANEOUS_AUDIO,
         }),
         quotas={
             Quota.TRANSCRIPTION_SECONDS: 8 * 3600,

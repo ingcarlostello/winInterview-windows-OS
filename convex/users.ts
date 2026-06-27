@@ -9,16 +9,15 @@ import {
 import { generateUserKey } from "./lib/userKey";
 
 function buildFeatureFlags(planId: PlanId): Record<string, boolean> {
-  const flags = {
-    custom_prompts: false,
-    simultaneous_captures: false,
-    simultaneous_analysis: false,
-    keyboard_shortcuts: false,
-    invisible_mode: false,
-    ghost_mode: false,
-  };
+  // Enumerate every known feature from the superset plan (ultra) so a feature
+  // added to PLAN_FEATURES is reflected here automatically — no second edit, no
+  // missing keys reaching the frontend as `undefined` (which resolves to false).
+  const flags: Record<string, boolean> = {};
+  for (const feature of PLAN_FEATURES.ultra) {
+    flags[feature] = false;
+  }
   for (const feature of PLAN_FEATURES[planId] ?? []) {
-    flags[feature as keyof typeof flags] = true;
+    flags[feature] = true;
   }
   return flags;
 }

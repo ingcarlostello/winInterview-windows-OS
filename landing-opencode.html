@@ -2066,7 +2066,114 @@
                 </div>
               </div>
             </div>
-            
+
+            <!-- Mockup 7: Audio source selector (system audio) -->
+            <div class="app-mockup-wrap" data-w="730" data-h="730">
+              <div class="mockup-scale-wrap">
+                <div class="ic-overlay">
+                  <div class="ic-main">
+                    <div class="ic-winbar">
+                      <div class="ic-winbar-left">
+                        <span class="ic-winbar-btn">✕</span>
+                        <span class="ic-winbar-btn">−</span>
+                      </div>
+                      <div class="ic-winbar-center">
+                        <span class="ic-winbar-title">wininterview</span>
+                        <span class="ic-theme-toggle">◐ <span data-i18n="ic.dark">Dark</span></span>
+                      </div>
+                      <div class="ic-winbar-right">
+                        <span style="color: var(--color-accent);">📌</span>
+                        <span class="ic-plan-badge">👑 Ultra</span>
+                      </div>
+                    </div>
+                    <div class="ic-toolbar">
+                      <div class="ic-toolbar-left">
+                        <span class="ic-bot-box">🤖</span>
+                        <span class="ic-badge ic-badge-time">🕐 45m</span>
+                        <span class="ic-badge ic-badge-session">⏱ 08:30</span>
+                        <span class="ic-screen-toggle">🖥 <span data-i18n="ic.screenReader">Screen Reader</span></span>
+                      </div>
+                      <span class="ic-lang-selector">🇪🇸 Español ▾</span>
+                      <div class="ic-toolbar-right">
+                        <div style="position:relative;">
+                          <span class="ic-lang-selector" style="color:var(--color-accent);">
+                            🔊 <span data-i18n="ic.audioSourceSystem">Audio del sistema</span> ▾
+                          </span>
+                          <div style="position:absolute; top:calc(100%+8px); right:0; width:280px;
+                                      background:var(--bg-elev-2); border:1px solid var(--border-strong);
+                                      border-radius:10px; padding:6px; z-index:10;
+                                      box-shadow:0 8px 24px rgba(0,0,0,0.5);">
+                            <div style="padding:8px 12px; border-radius:6px; cursor:pointer; display:flex; align-items:center; gap:10px;">
+                              <span style="flex-shrink:0;">🎤</span>
+                              <div style="flex:1; min-width:0;">
+                                <div style="font-size:14px; font-weight:500; color:var(--text-primary);" data-i18n="ic.audioSourceMic">Micrófono</div>
+                                <div style="font-size:12px; color:var(--text-muted);" data-i18n="ic.audioSourceMicDesc">Solo tu voz</div>
+                              </div>
+                            </div>
+                            <div style="padding:8px 12px; border-radius:6px; cursor:pointer; display:flex; align-items:center; gap:10px; background:var(--bg-elev-3);">
+                              <span style="flex-shrink:0; color:var(--color-accent);">✓ 🔊</span>
+                              <div style="flex:1; min-width:0;">
+                                <div style="font-size:14px; font-weight:500; color:var(--color-accent);" data-i18n="ic.audioSourceSystem">Audio del sistema</div>
+                                <div style="font-size:12px; color:var(--text-muted);" data-i18n="ic.audioSourceSystemDesc">Capta Zoom, Meet y Teams</div>
+                              </div>
+                            </div>
+                            <div style="padding:8px 12px; border-radius:6px; cursor:pointer; display:flex; align-items:center; gap:10px;">
+                              <span style="flex-shrink:0;">🎚️</span>
+                              <div style="flex:1; min-width:0;">
+                                <div style="font-size:14px; font-weight:500; color:var(--text-primary);" data-i18n="ic.audioSourceBoth">Mic + Sistema</div>
+                                <div style="font-size:12px; color:var(--text-muted);" data-i18n="ic.audioSourceBothDesc">Mezcla ambas fuentes</div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <span class="ic-status-pill active">
+                          <span class="ic-status-dot pulse"></span>
+                          <span data-i18n="ic.listening">Escuchando</span>
+                          <span class="ic-mic-pulse">🎤</span>
+                        </span>
+                      </div>
+                    </div>
+                    <div class="ic-divider"></div>
+                    <div class="ic-controls">
+                      <div class="ic-controls-left">
+                        <span class="ic-btn ic-btn-pause">⏸ <span data-i18n="ic.pause">Pausar</span></span>
+                        <span class="ic-btn ic-btn-end">⏹ <span data-i18n="ic.end">Terminar</span></span>
+                      </div>
+                      <span class="ic-protection on">👁</span>
+                    </div>
+                    <div class="ic-divider-mx"></div>
+                    <div class="ic-prompt-bar">
+                      <div class="ic-prompt-toggle">
+                        <div class="ic-prompt-label">⚙ <span data-i18n="ic.customPrompt">Personalizar Prompt</span></div>
+                        <span>▾</span>
+                      </div>
+                    </div>
+                    <div class="ic-section">
+                      <div class="ic-section-header">
+                        <div class="ic-section-label">💬 <span data-i18n="ic.interviewer">Entrevistador</span></div>
+                        <span class="ic-char-badge">92 chars</span>
+                      </div>
+                      <div class="ic-transcription-box">
+                        <p data-i18n="ic.mock.processQuestion">¿Cuáles son las diferencias entre procesos y threads?</p>
+                      </div>
+                    </div>
+                    <div class="ic-section flex-1">
+                      <div class="ic-section-header">
+                        <div class="ic-section-label">🤖 <span data-i18n="ic.copilot">Copiloto IA</span></div>
+                        <span class="ic-res-badge listening" data-i18n="ic.listeningBadge">Escuchando</span>
+                      </div>
+                      <div class="ic-response-box">
+                        <div class="ic-md" data-i18n-html="ic.mock.processResponse">
+                          <p><strong>Procesos vs Threads:</strong></p>
+                          <p>Los procesos son instancias independientes de programas con su propio espacio de memoria...</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <button class="gallery-arrow prev" id="prevArrow" aria-label="Previous">‹</button>
             <button class="gallery-arrow next" id="nextArrow" aria-label="Next">›</button>
           </div>
@@ -2212,7 +2319,7 @@
         'gallery.slide4': 'Glass theme',
         'gallery.slide5': 'Ghost mode',
         'gallery.slide6': 'Cuota agotada',
-        'gallery.slide7': 'Planes',
+        'gallery.slide7': 'Fuente de audio',
         'pricing.label': 'Precios',
         'pricing.title': 'Planes simples y transparentes',
         'pricing.subtitle': 'Empieza gratis y mejora cuando estés listo. Cancela cuando quieras.',
@@ -2236,6 +2343,7 @@
         'pricing.feat.invisible': 'Modo invisible',
         'pricing.feat.ghost': 'Modo fantasma',
         'pricing.feat.thinking': 'Modo pensamiento (Ultra)',
+        'pricing.feat.audioSource': 'Audio del sistema',
         'pricing.feat.trans': 'Transcripción',
         'pricing.feat.captures': 'Capturas/mes',
         'pricing.feat.analyses': 'Análisis/mes',
@@ -2256,6 +2364,15 @@
         'faq.5.a': 'Puedes cancelar en cualquier momento desde tu cuenta. Mantendrás el acceso hasta el final de tu período de facturación actual. La facturación se gestiona con Paddle.',
         'faq.6.q': '¿Qué idiomas soporta?',
         'faq.6.a': 'La interfaz y las respuestas de IA soportan inglés y español, con selector integrado y prompts personalizados por idioma.',
+        'ic.audioSource': 'Fuente de audio',
+        'ic.audioSourceMic': 'Micrófono',
+        'ic.audioSourceSystem': 'Audio del sistema',
+        'ic.audioSourceBoth': 'Mic + Sistema',
+        'ic.audioSourceMicDesc': 'Solo tu voz',
+        'ic.audioSourceSystemDesc': 'Capta Zoom, Meet y Teams',
+        'ic.audioSourceBothDesc': 'Mezcla ambas fuentes',
+        'faq.7.q': '¿Por qué con audífonos la app no transcribe al entrevistador?',
+        'faq.7.a': 'En el modo micrófono la app solo capta lo que entra por tu micrófono: tu propia voz. La voz del entrevistador llega a tus audífonos, pero no al micrófono, así que no puede transcribirla (con altavoz sí, aunque con ruido y eco). Para captar al entrevistador con audífonos puestos necesitas la captura de audio del sistema, que toma directamente el sonido que reproduce tu PC (Zoom, Meet, Teams) de forma limpia. Esa función está disponible en el plan Ultra, donde puedes elegir entre micrófono, audio del sistema o ambos.',
         'cta.title': '¿Listo para aprobar tu próxima entrevista?',
         'cta.subtitle': 'Únete a miles de candidatos que convirtieron la ansiedad en ofertas.',
         'cta.button': 'Empezar ahora',
@@ -2327,7 +2444,9 @@
         'ic.mock.restQuestion': 'What are the differences between REST and GraphQL APIs?',
         'ic.mock.restResponse': '<p><strong>REST vs GraphQL:</strong></p><ul><li><strong>REST</strong>: Multiple endpoints, fixed responses</li><li><strong>GraphQL</strong>: Single endpoint, client-driven queries</li></ul><p>GraphQL reduces over-fetching but adds complexity...<span class="ic-cursor">▎</span></p>',
         'ic.mock.jwtQuestion': '¿Cómo implementarías autenticación JWT en una API REST?',
-        'ic.mock.jwtResponse': '<p><strong>Autenticación JWT:</strong></p><p>Implementar middleware que verifique el token en cada request...</p>'
+        'ic.mock.jwtResponse': '<p><strong>Autenticación JWT:</strong></p><p>Implementar middleware que verifique el token en cada request...</p>',
+        'ic.mock.processQuestion': '¿Cuáles son las diferencias entre procesos y threads?',
+        'ic.mock.processResponse': '<p><strong>Procesos vs Threads:</strong></p><p>Los procesos son instancias independientes con su propio espacio de memoria. Los threads comparten memoria dentro del mismo proceso, siendo más ligeros pero requiriendo sincronización...</p>'
       },
       en: {
         'nav.features': 'Features',
@@ -2412,7 +2531,7 @@
         'gallery.slide4': 'Glass theme',
         'gallery.slide5': 'Ghost mode',
         'gallery.slide6': 'Quota exceeded',
-        'gallery.slide7': 'Plans',
+        'gallery.slide7': 'Audio source',
         'pricing.label': 'Pricing',
         'pricing.title': 'Simple, transparent plans',
         'pricing.subtitle': 'Start free, upgrade when you are ready. Cancel anytime.',
@@ -2436,6 +2555,7 @@
         'pricing.feat.invisible': 'Invisible mode',
         'pricing.feat.ghost': 'Ghost mode',
         'pricing.feat.thinking': 'Thinking mode (Ultra)',
+        'pricing.feat.audioSource': 'System audio',
         'pricing.feat.trans': 'Transcription',
         'pricing.feat.captures': 'Captures/mo',
         'pricing.feat.analyses': 'Analyses/mo',
@@ -2456,6 +2576,15 @@
         'faq.5.a': 'You can cancel anytime from your account. You will keep access until the end of your current billing period. Billing is managed by Paddle.',
         'faq.6.q': 'What languages are supported?',
         'faq.6.a': 'The interface and AI responses support English and Spanish, with a built-in selector and per-language custom prompts.',
+        'ic.audioSource': 'Audio source',
+        'ic.audioSourceMic': 'Microphone',
+        'ic.audioSourceSystem': 'System audio',
+        'ic.audioSourceBoth': 'Mic + System',
+        'ic.audioSourceMicDesc': 'Your voice only',
+        'ic.audioSourceSystemDesc': 'Captures Zoom, Meet & Teams',
+        'ic.audioSourceBothDesc': 'Mix both sources',
+        'faq.7.q': 'Why doesn\'t the app transcribe the interviewer when I use headphones?',
+        'faq.7.a': 'In microphone mode the app only captures what enters your mic: your own voice. The interviewer\'s voice goes to your headphones, not to the microphone, so it cannot be transcribed (it works with a speaker, but with noise and echo). To capture the interviewer while wearing headphones you need system audio capture, which takes the sound your PC plays (Zoom, Meet, Teams) directly and cleanly. That feature is available on the Ultra plan, where you can choose between microphone, system audio, or both.',
         'cta.title': 'Ready to ace your next interview?',
         'cta.subtitle': 'Join thousands of candidates who turned interview anxiety into offers.',
         'cta.button': 'Get started',
@@ -2527,7 +2656,9 @@
         'ic.mock.restQuestion': 'What are the differences between REST and GraphQL APIs?',
         'ic.mock.restResponse': '<p><strong>REST vs GraphQL:</strong></p><ul><li><strong>REST</strong>: Multiple endpoints, fixed responses</li><li><strong>GraphQL</strong>: Single endpoint, client-driven queries</li></ul><p>GraphQL reduces over-fetching but adds complexity...<span class="ic-cursor">▎</span></p>',
         'ic.mock.jwtQuestion': 'How would you implement JWT authentication in a REST API?',
-        'ic.mock.jwtResponse': '<p><strong>JWT Authentication:</strong></p><p>Implement middleware that verifies the token on each request...</p>'
+        'ic.mock.jwtResponse': '<p><strong>JWT Authentication:</strong></p><p>Implement middleware that verifies the token on each request...</p>',
+        'ic.mock.processQuestion': 'What are the differences between processes and threads?',
+        'ic.mock.processResponse': '<p><strong>Processes vs Threads:</strong></p><p>Processes are independent instances with separate memory space. Threads share memory within the same process, making them lighter but requiring synchronization mechanisms...</p>'
       }
     };
 
@@ -2568,7 +2699,8 @@
             { key: 'pricing.feat.shortcuts', included: false },
             { key: 'pricing.feat.invisible', included: false },
             { key: 'pricing.feat.ghost', included: false },
-            { key: 'pricing.feat.thinking', included: false }
+            { key: 'pricing.feat.thinking', included: false },
+            { key: 'pricing.feat.audioSource', included: false }
           ]
         },
         {
@@ -2588,7 +2720,8 @@
             { key: 'pricing.feat.shortcuts', included: false },
             { key: 'pricing.feat.invisible', included: false },
             { key: 'pricing.feat.ghost', included: false },
-            { key: 'pricing.feat.thinking', included: false }
+            { key: 'pricing.feat.thinking', included: false },
+            { key: 'pricing.feat.audioSource', included: false }
           ]
         },
         {
@@ -2608,7 +2741,8 @@
             { key: 'pricing.feat.shortcuts', included: true },
             { key: 'pricing.feat.invisible', included: false },
             { key: 'pricing.feat.ghost', included: false },
-            { key: 'pricing.feat.thinking', included: false }
+            { key: 'pricing.feat.thinking', included: false },
+            { key: 'pricing.feat.audioSource', included: false }
           ]
         },
         {
@@ -2628,11 +2762,12 @@
             { key: 'pricing.feat.shortcuts', included: true },
             { key: 'pricing.feat.invisible', included: true },
             { key: 'pricing.feat.ghost', included: true },
-            { key: 'pricing.feat.thinking', included: true }
+            { key: 'pricing.feat.thinking', included: true },
+            { key: 'pricing.feat.audioSource', value: 'Mic / System / Both', included: true }
           ]
         }
       ],
-      faq: [0, 1, 2, 3, 4, 5, 6]
+      faq: [0, 1, 2, 3, 4, 5, 6, 7]
     };
 
     /* ============================================================
@@ -2823,7 +2958,7 @@
         '<button class="gallery-dot ' + (i === 0 ? 'active' : '') + '" aria-label="Go to slide ' + (i + 1) + '"></button>'
       ).join('');
 
-      const thumbIcons = ['🟢', '🎙️', '⚡', '🖥️', '🔮', '👻', '⏸️', '👑'];
+      const thumbIcons = ['🟢', '🎙️', '⚡', '🖥️', '🔮', '👻', '⏸️', '🔊'];
       thumbs.innerHTML = Array.from({ length: totalSlides }, (_, i) =>
         '<div class="gallery-thumb ' + (i === 0 ? 'active' : '') + '" data-index="' + i + '">' +
         '<div class="gallery-thumb-content">' +

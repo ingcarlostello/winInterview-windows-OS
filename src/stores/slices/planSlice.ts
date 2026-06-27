@@ -11,6 +11,8 @@ export interface FeatureFlags {
   invisible_mode: boolean;
   ghost_mode: boolean;
   thinking_mode: boolean;
+  system_audio_capture: boolean;
+  simultaneous_audio: boolean;
 }
 
 export interface QuotaInfo {
@@ -60,6 +62,8 @@ export const DEFAULT_PLAN_INFO: PlanInfo = {
     invisible_mode: false,
     ghost_mode: false,
     thinking_mode: false,
+    system_audio_capture: false,
+    simultaneous_audio: false,
   },
   quotas: {
     transcription_seconds: { used: 0, limit: 180, remaining: 180 },

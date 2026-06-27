@@ -112,6 +112,15 @@ export type TranslationKey =
   | "upgradeSuccess"
   | "upgradeFallback"
   | "thinkingMode"
+  | "audioSourceLabel"
+  | "audioSourceMic"
+  | "audioSourceSystem"
+  | "audioSourceBoth"
+  | "audioSourceMicDesc"
+  | "audioSourceSystemDesc"
+  | "audioSourceBothDesc"
+  | "audioSourceUltraTooltip"
+  | "audioSourceMicHint"
   | "keyLoginLabel"
   | "keyLoginSubmit"
   | "keyLoginInvalid";
@@ -231,6 +240,15 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     upgradeSuccess: "¡Suscripción activada! Tu plan {plan} está listo.",
     upgradeFallback: "Si completaste tu compra y no ves los cambios, cierra sesión y vuelve a iniciar sesión.",
     thinkingMode: "Modo pensamiento",
+    audioSourceLabel: "Fuente de audio",
+    audioSourceMic: "Micrófono",
+    audioSourceSystem: "Audio del sistema",
+    audioSourceBoth: "Ambos",
+    audioSourceMicDesc: "Te capta a ti. Requiere altavoz (no audífonos) para oír al entrevistador.",
+    audioSourceSystemDesc: "Capta al entrevistador aunque uses audífonos. Recomendado.",
+    audioSourceBothDesc: "Micrófono + audio del sistema mezclados en un solo canal.",
+    audioSourceUltraTooltip: "Captura de audio del sistema disponible en Ultra",
+    audioSourceMicHint: "🎧 Modo micrófono: usa altavoz (no audífonos) para captar al entrevistador. Mejora a Ultra para capturar el audio del sistema.",
     keyLoginLabel: "O pega tu clave de acceso",
     keyLoginSubmit: "Entrar",
     keyLoginInvalid: "Clave inválida (debe empezar con wik_).",
@@ -349,6 +367,15 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     upgradeSuccess: "Subscription activated! Your {plan} plan is ready.",
     upgradeFallback: "If you completed your purchase and don't see changes, sign out and sign back in.",
     thinkingMode: "Thinking mode",
+    audioSourceLabel: "Audio source",
+    audioSourceMic: "Microphone",
+    audioSourceSystem: "System audio",
+    audioSourceBoth: "Both",
+    audioSourceMicDesc: "Captures you. Requires a speaker (not headphones) to hear the interviewer.",
+    audioSourceSystemDesc: "Captures the interviewer even with headphones on. Recommended.",
+    audioSourceBothDesc: "Microphone + system audio mixed into a single channel.",
+    audioSourceUltraTooltip: "System audio capture available on Ultra",
+    audioSourceMicHint: "🎧 Microphone mode: use a speaker (not headphones) to capture the interviewer. Upgrade to Ultra to capture system audio.",
     keyLoginLabel: "Or paste your access key",
     keyLoginSubmit: "Enter",
     keyLoginInvalid: "Invalid key (must start with wik_).",

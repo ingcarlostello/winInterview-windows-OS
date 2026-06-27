@@ -49,6 +49,7 @@ export const useInterviewStore = create<RootState>()(
         customPrompts: state.customPrompts,
         language: state.language,
         theme: state.theme,
+        audioSource: state.audioSource,
         pendingUpgrade: state.pendingUpgrade,
         userKey: state.userKey,
       }),

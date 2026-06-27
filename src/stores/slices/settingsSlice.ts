@@ -3,6 +3,7 @@ import type { RootState } from "../interview";
 
 export type Language = "es" | "en";
 export type Theme = "dark" | "glass";
+export type AudioSource = "mic" | "system" | "both";
 
 interface CustomPrompts {
   es: string;
@@ -12,6 +13,7 @@ interface CustomPrompts {
 export interface SettingsSlice {
   language: Language;
   theme: Theme;
+  audioSource: AudioSource;
   customPrompts: CustomPrompts;
   showPromptEditor: boolean;
   ghostMode: boolean;
@@ -19,6 +21,7 @@ export interface SettingsSlice {
   alwaysOnTop: boolean;
   setLanguage: (language: Language) => void;
   setTheme: (theme: Theme) => void;
+  setAudioSource: (source: AudioSource) => void;
   setCustomPrompt: (language: Language, prompt: string) => void;
   clearCustomPrompt: (language: Language) => void;
   getCustomPrompt: () => string;
@@ -32,6 +35,7 @@ export interface SettingsSlice {
 export const createSettingsSlice: StateCreator<RootState, [], [], SettingsSlice> = (set, get) => ({
   language: "en",
   theme: "dark",
+  audioSource: "mic",
   customPrompts: { es: "", en: "" },
   showPromptEditor: false,
   ghostMode: false,
@@ -40,6 +44,7 @@ export const createSettingsSlice: StateCreator<RootState, [], [], SettingsSlice>
 
   setLanguage: (language) => set({ language }),
   setTheme: (theme) => set({ theme }),
+  setAudioSource: (audioSource) => set({ audioSource }),
   setCustomPrompt: (language, prompt) =>
     set((state) => ({
       customPrompts: { ...state.customPrompts, [language]: prompt },

@@ -11,7 +11,7 @@ export const PLAN_FEATURES: Record<PlanId, string[]> = {
   free: [],
   lite: [],
   pro: ["custom_prompts", "simultaneous_captures", "simultaneous_analysis", "keyboard_shortcuts"],
-  ultra: ["custom_prompts", "simultaneous_captures", "simultaneous_analysis", "keyboard_shortcuts", "invisible_mode", "ghost_mode", "thinking_mode"],
+  ultra: ["custom_prompts", "simultaneous_captures", "simultaneous_analysis", "keyboard_shortcuts", "invisible_mode", "ghost_mode", "thinking_mode", "system_audio_capture", "simultaneous_audio"],
 };
 
 export const PLAN_NAMES: Record<PlanId, string> = {

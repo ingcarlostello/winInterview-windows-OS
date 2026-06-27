@@ -16,6 +16,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useInterviewStore } from "../stores/interview";
 import type { Status } from "../stores/interview";
 import LanguageSelector from "./LanguageSelector";
+import AudioSourceSelector from "./AudioSourceSelector";
 import SessionTimer from "./SessionTimer";
 import PricingModal from "./PricingModal";
 import { useTranslation } from "../hooks/useTranslation";
@@ -279,7 +280,10 @@ export default function StatusBar({
           )}
         </div>
 
-        <LanguageSelector onChangeLanguage={onChangeLanguage} />
+        <div className="flex items-center gap-2">
+          <AudioSourceSelector />
+          <LanguageSelector onChangeLanguage={onChangeLanguage} />
+        </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
           {ghostMode && canUseGhostMode && (

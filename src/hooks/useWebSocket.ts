@@ -90,8 +90,9 @@ export function useWebSocket() {
       }
       const language = useInterviewStore.getState().language;
       const planId = useInterviewStore.getState().planInfo?.plan_id ?? "free";
+      const audioSource = useInterviewStore.getState().audioSource;
 
-      const ws = new WebSocket(`${WS_BASE}?lang=${language}&plan=${planId}&${authParam}`);
+      const ws = new WebSocket(`${WS_BASE}?lang=${language}&plan=${planId}&audio_source=${audioSource}&${authParam}`);
       wsRef.current = ws;
 
     ws.onopen = () => {
