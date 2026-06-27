@@ -191,7 +191,7 @@ class AgentSession:
         logger.info(f"System prompt for session: {self.history.messages[0]['content'][:150]}...")
 
         if not await self.audio.start():
-            await self._send_error("Agent connection timeout")
+            await self._send_error(self.audio.agent.last_error or "Agent connection timeout")
             await self.stop()
             return False
 
