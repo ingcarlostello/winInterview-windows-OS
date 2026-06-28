@@ -144,3 +144,49 @@ export const decrementMyQuota = mutation({
     return { capturesRemaining: quota.capturesRemaining - args.amount };
   },
 });
+
+export const decrementMyQuotaByKey = mutation({
+  args: {
+    userKey: v.string(),
+    amount: v.number(),
+  },
+  handler: async (ctx, args) => {
+    if (!Number.isFinite(args.amount) || args.amount <= 0) {
+      throw new Error("Invalid amount");
+    }
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_user_key", (q) => q.eq("userKey", args.userKey))
+      .unique();
+
+    if (!user) throw new Error("User not found");
+
+    const month = new Date().toISOString().slice(0, 7);
+    let quota = await ctx.db
+      .query("quotas")
+      .withIndex("by_user_month", (q) => q.eq("userId", user._id).eq("month", month))
+      .unique();
+
+    if (!quota) {
+      const planQuotas = PLAN_QUOTAS[user.planId as PlanId] ?? PLAN_QUOTAS.free;
+      const newId = await ctx.db.insert("quotas", {
+        userId: user._id,
+        month,
+        transcriptionSecondsRemaining: planQuotas.transcriptionSeconds,
+        capturesRemaining: planQuotas.captures,
+        analysesRemaining: planQuotas.analyses,
+      });
+      quota = await ctx.db.get(newId);
+    }
+
+    if (!quota) throw new Error("Failed to load quota");
+    if (quota.capturesRemaining < args.amount) throw new Error("Capture quota exceeded");
+
+    await ctx.db.patch(quota._id, {
+      capturesRemaining: quota.capturesRemaining - args.amount,
+    });
+
+    return { capturesRemaining: quota.capturesRemaining - args.amount };
+  },
+});

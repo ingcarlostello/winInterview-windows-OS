@@ -162,22 +162,25 @@ export const paddleWebhook = httpAction(async (ctx, request) => {
   const data = event.data ?? {};
   console.log(`[Paddle webhook] Event: ${eventType}`);
 
+  // No exigimos clerk_id globalmente: los eventos `subscription.*` no lo llevan en
+  // custom_data (solo la transacción). Para esos, el usuario se resuelve por sus IDs
+  // de Paddle dentro de handleSubscriptionEvent. `transaction.completed` sí debe traerlo.
   const clerkId = extractClerkId(data);
-  if (!clerkId) {
-    console.warn(`[Paddle webhook] No clerk_id in custom_data for event ${eventType}`);
-    return new Response(JSON.stringify({ ok: true, skipped: "no clerk_id" }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
 
   try {
     if (eventType.startsWith("subscription.")) {
       await handleSubscriptionEvent(ctx, eventType, data as PaddleSubscriptionData, clerkId);
     } else if (eventType === "transaction.completed") {
+      if (!clerkId) {
+        console.warn(`[Paddle webhook] transaction.completed without clerk_id — skipping`);
+        return new Response(JSON.stringify({ ok: true, skipped: "no clerk_id" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
       await handleTransactionCompleted(ctx, data as PaddleTransactionData, clerkId);
     } else if (eventType === "transaction.payment_failed") {
-      console.warn(`[Paddle webhook] Payment failed for clerk ${clerkId}`);
+      console.warn(`[Paddle webhook] Payment failed${clerkId ? ` for clerk ${clerkId}` : ""}`);
     } else {
       console.log(`[Paddle webhook] Unhandled event type: ${eventType}`);
     }
@@ -200,7 +203,7 @@ async function handleSubscriptionEvent(
   ctx: Parameters<Parameters<typeof httpAction>[0]>[0],
   eventType: string,
   data: PaddleSubscriptionData,
-  clerkId: string
+  clerkIdFromEvent: string | null
 ): Promise<void> {
   const subscriptionId = data.id ?? undefined;
   const customerId = data.customer_id ?? undefined;
@@ -208,40 +211,42 @@ async function handleSubscriptionEvent(
   const managementUrls = data.management_urls ?? null;
   const currentPeriodEnd = data.current_billing_period?.ends_at ?? undefined;
 
-  if (eventType === "subscription.canceled") {
-    await ctx.runMutation(internal.users.applySubscription, {
-      clerkId,
-      planId: "free",
+  // Los eventos `subscription.*` no llevan clerk_id en custom_data (solo lo lleva la
+  // transacción). Se resuelve el usuario por los IDs de Paddle que la fila ya guarda
+  // (puestos por el `transaction.completed` de la compra inicial).
+  let clerkId = clerkIdFromEvent;
+  if (!clerkId) {
+    clerkId = await ctx.runQuery(internal.users.findClerkIdByPaddleIds, {
       paddleSubscriptionId: subscriptionId,
       paddleCustomerId: customerId,
-      paddleStatus: "canceled",
-      paddleCancelUrl: managementUrls?.cancel ?? undefined,
-      paddleUpdatePaymentUrl: managementUrls?.update_payment_method ?? undefined,
-      subscriptionCurrentPeriodEnd: currentPeriodEnd,
     });
-    console.log(`[Paddle webhook] Reverted clerk ${clerkId} to free (canceled)`);
+  }
+  if (!clerkId) {
+    console.warn(
+      `[Paddle webhook] Could not resolve user for ${eventType} (sub=${subscriptionId}) — skipping`
+    );
     return;
   }
 
-  if (eventType === "subscription.past_due" || eventType === "subscription.paused") {
-    await ctx.runMutation(internal.users.applySubscription, {
-      clerkId,
-      planId: "free",
-      paddleSubscriptionId: subscriptionId,
-      paddleCustomerId: customerId,
-      paddleStatus: status,
-      paddleCancelUrl: managementUrls?.cancel ?? undefined,
-      paddleUpdatePaymentUrl: managementUrls?.update_payment_method ?? undefined,
-      subscriptionCurrentPeriodEnd: currentPeriodEnd,
-    });
-    console.log(`[Paddle webhook] Set clerk ${clerkId} to free (${status})`);
+  if (!status) {
+    console.warn(`[Paddle webhook] ${eventType} without status — skipping`);
     return;
   }
 
-  const planId = extractPlanId(data as unknown as Record<string, unknown>);
-  if (!planId) {
-    console.warn(`[Paddle webhook] Could not determine plan_id for ${eventType}`);
-    return;
+  // El plan se decide por el ESTADO de la suscripción, NO por el tipo de evento.
+  // Paddle envía un `subscription.updated` (status "canceled"/"paused"/"past_due")
+  // junto con la cancelación; si la rama "general" aplicara el plan del precio sin
+  // mirar el estado, pisaría el revert a free. Solo `active`/`trialing` dan plan de pago.
+  const isEntitled = status === "active" || status === "trialing";
+
+  let planId = "free";
+  if (isEntitled) {
+    const extracted = extractPlanId(data as unknown as Record<string, unknown>);
+    if (!extracted) {
+      console.warn(`[Paddle webhook] Could not determine plan_id for active ${eventType}`);
+      return;
+    }
+    planId = extracted;
   }
 
   await ctx.runMutation(internal.users.applySubscription, {
@@ -254,7 +259,9 @@ async function handleSubscriptionEvent(
     paddleUpdatePaymentUrl: managementUrls?.update_payment_method ?? undefined,
     subscriptionCurrentPeriodEnd: currentPeriodEnd,
   });
-  console.log(`[Paddle webhook] Applied plan ${planId} to clerk ${clerkId} (${eventType})`);
+  console.log(
+    `[Paddle webhook] ${eventType} (status ${status}) → plan ${planId} for clerk ${clerkId}`
+  );
 }
 
 async function handleTransactionCompleted(
