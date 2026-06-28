@@ -71,8 +71,12 @@ Single store at `src/stores/interview.ts` (persisted settings via `persist` midd
 | `isCapturingScreen` | `boolean` | Screen capture in progress |
 | `isAnalyzingScreen` | `boolean` | Vision analysis in progress |
 | `screenPrompt` | `string` | Custom vision analysis prompt |
+| `planInfo` | `PlanInfo \| null` | Current plan (Pro/Ultra/Free) + features + quotas. **Account-state** — persists across disconnect, cleared only on logout |
+| `userKey` | `string \| null` | Desktop access key (`wik_*`), persisted for session resumption |
 
-Persisted settings: `customPrompts`, `language`, `theme`
+Persisted settings: `customPrompts`, `language`, `theme`, `audioSource`, `pendingUpgrade`, `userKey`
+
+**Account-state (persists disconnect/reconnect):** `planInfo`, `userKey` — cleared only on logout to prevent showing stale data to next user.
 
 Actions: `setStatus`, `setLanguage`, `setTranscription`, `addResponseChunk`, `clearResponse`, `setError`, `incrementQuestionsAnswered`, `setCustomPrompt`, `clearCustomPrompt`, `setShowPromptEditor`, `toggleGhostMode`, `toggleContentProtected`, `setAlwaysOnTop`, `setTheme`, `toggleScreenPanel`, `setScreenImage`, `addScreenImage`, `clearScreenImages`, `addScreenChunk`, `clearScreenChunks`, `setCapturingScreen`, `setAnalyzingScreen`, `setScreenPrompt`, `reset`
 
@@ -92,7 +96,7 @@ Actions: `setStatus`, `setLanguage`, `setTranscription`, `addResponseChunk`, `cl
 
 **`src/hooks/usePlanSync.ts`**:
 
-- Reactive Convex query (`users.getCurrentUserPlanInfo`) seeds `planInfo` into Zustand on app load (only when the store has no current plan info)
+- **Key-mode only:** Reactive Convex query (`users.getPlanInfoByUserKey`) seeds `planInfo` into Zustand on app load using the pasted access key
 - Provides the initial cross-session source of truth for plan features and quota counters
 
 **`src/hooks/useCaptureQuota.ts`**:
@@ -132,9 +136,9 @@ Actions: `setStatus`, `setLanguage`, `setTranscription`, `addResponseChunk`, `cl
 
 | Component | Purpose |
 |---|---|
-| `App.tsx` | Root — wires `useWebSocket().send` to `Overlay` callbacks. Listens for Tauri `capture-screen-shortcut` event and invokes `capture_screen` command. Invokes `set_window_expanded` Tauri command |
+| `App.tsx` | Root — **key-mode only (2026-06-27):** checks `if (!userKey)` → renders centered `KeyLoginForm` card (paste key + Enter), else renders `Overlay` (main app). Wires `useWebSocket().send` to `Overlay` callbacks. Listens for Tauri `capture-screen-shortcut` event and invokes `capture_screen` command. Invokes `set_window_expanded` Tauri command. Logout = `disconnect(); clearUserKey()` |
 | `Overlay.tsx` | Main layout — header bar (StatusBar + Controls), PromptEditor, Transcription, Response, QuestionCounter, ScreenPanel. Supports `dark` and `glass` themes. Ghost mode styling. Listens for Tauri `ghost-mode-changed`, `content-protected-changed`, `always-on-top-changed` and `pause-resume-shortcut` events. Auto-disables `contentProtected` when plan lacks `invisible_mode` |
-| `StatusBar.tsx` | Bot icon, theme toggle (Dark/Liquid), screen reader toggle, language selector, ghost mode badge, content protection badge, always-on-top indicator (Pin/PinOff icon), Crown icon + plan name badge, status dot with pulse animation, microphone icon, error text. Uses `data-tauri-drag-region` for window dragging |
+| `StatusBar.tsx` | Bot icon, theme toggle (Dark/Liquid), screen reader toggle, language selector, ghost mode badge, content protection badge, always-on-top indicator (Pin/PinOff icon), Crown icon + plan name badge (shows skeleton `animate-pulse` while loading), quota badge (shows skeleton while loading instead of red "0m"), status dot with pulse animation, microphone icon, error text. Uses `data-tauri-drag-region` for window dragging. **Plan badge fix (2026-06-28):** renders skeleton placeholder while `planInfo` is null, preventing the "Free" → real plan flash |
 | `Transcription.tsx` | Shows "Entrevistador" label + transcribed text in bordered box. Shows placeholder when no content |
 | `Response.tsx` | AI Copilot response area. Uses `react-markdown` + `remark-gfm` + `react-syntax-highlighter` (vscDarkPlus theme). Custom table styling. Blinking cursor (`▎`) during streaming. Three-dot animation while thinking. Copy button |
 | `Controls.tsx` | Connect/Listen button (idle/error), connecting spinner, Pause/Resume toggle, End/Disconnect button, content protection toggle (Eye/EyeOff icons). Invokes Tauri `toggle_content_protected` command. Lock icon when `!invisible_mode` |

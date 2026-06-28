@@ -123,7 +123,9 @@ export type TranslationKey =
   | "audioSourceMicHint"
   | "keyLoginLabel"
   | "keyLoginSubmit"
-  | "keyLoginInvalid";
+  | "keyLoginInvalid"
+  | "keyLoginTitle"
+  | "keyLoginSubtitle";
 
 const translations: Record<Language, Record<TranslationKey, string>> = {
   es: {
@@ -249,9 +251,11 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     audioSourceBothDesc: "Micrófono + audio del sistema mezclados en un solo canal.",
     audioSourceUltraTooltip: "Captura de audio del sistema disponible en Ultra",
     audioSourceMicHint: "🎧 Modo micrófono: usa altavoz (no audífonos) para captar al entrevistador. Mejora a Ultra para capturar el audio del sistema.",
-    keyLoginLabel: "O pega tu clave de acceso",
+    keyLoginLabel: "Clave de acceso",
     keyLoginSubmit: "Entrar",
     keyLoginInvalid: "Clave inválida (debe empezar con wik_).",
+    keyLoginTitle: "Inicia sesión",
+    keyLoginSubtitle: "Pega la clave de acceso de tu cuenta para continuar",
   },
   en: {
     statusDisconnected: "Disconnected",
@@ -376,9 +380,11 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     audioSourceBothDesc: "Microphone + system audio mixed into a single channel.",
     audioSourceUltraTooltip: "System audio capture available on Ultra",
     audioSourceMicHint: "🎧 Microphone mode: use a speaker (not headphones) to capture the interviewer. Upgrade to Ultra to capture system audio.",
-    keyLoginLabel: "Or paste your access key",
+    keyLoginLabel: "Access key",
     keyLoginSubmit: "Enter",
     keyLoginInvalid: "Invalid key (must start with wik_).",
+    keyLoginTitle: "Sign in",
+    keyLoginSubtitle: "Paste your account access key to continue",
   },
 };
 

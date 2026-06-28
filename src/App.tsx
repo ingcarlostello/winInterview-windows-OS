@@ -1,38 +1,30 @@
 import { useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
+import { KeyRound } from "lucide-react";
 import Overlay from "./components/Overlay";
+import KeyLoginForm from "./components/KeyLoginForm";
 import { useWebSocket } from "./hooks/useWebSocket";
 import { useInterviewStore } from "./stores/interview";
-import { invoke } from "@tauri-apps/api/core";
-import { SignedIn, SignedOut, SignIn, useClerk } from "@clerk/clerk-react";
-import AuthGate from "./components/AuthGate";
-import EnsureConvexUser from "./components/EnsureConvexUser";
-import KeyLoginForm from "./components/KeyLoginForm";
-import { useAppAuth } from "./hooks/useAppAuth";
+import { useTranslation } from "./hooks/useTranslation";
 import { usePlanSync } from "./hooks/usePlanSync";
-import { usePromptSync } from "./hooks/usePromptSync";
 import { useScreenCapture } from "./hooks/useScreenCapture";
 import { useTranscriptionCountdown } from "./hooks/useTranscriptionCountdown";
 import { usePendingUpgrade } from "./hooks/usePendingUpgrade";
 
 export default function App() {
-  const { mode } = useAppAuth();
   const { send, disconnect, connect, setPrompt, restoreDefaultPrompt, changeLanguage } = useWebSocket();
-  const { signOut } = useClerk();
+  const { t } = useTranslation();
+  const userKey = useInterviewStore((s) => s.userKey);
   const clearUserKey = useInterviewStore((s) => s.clearUserKey);
   usePlanSync();
-  usePromptSync();
   const { captureScreen } = useScreenCapture();
   useTranscriptionCountdown();
   usePendingUpgrade();
 
   const handleLogout = () => {
     disconnect();
-    if (mode === "key") {
-      clearUserKey();
-    } else {
-      signOut();
-    }
+    clearUserKey();
   };
 
   useEffect(() => {
@@ -64,7 +56,29 @@ export default function App() {
     }
   };
 
-  const overlay = (
+  // Key-only auth: no stored access key → show the login card; the persisted key
+  // (localStorage) rehydrates synchronously, so there's no login flash on restart.
+  if (!userKey) {
+    return (
+      <div
+        className="flex h-screen w-screen items-center justify-center bg-[#08090c] text-white"
+        data-tauri-drag-region
+      >
+        <div className="flex w-full max-w-sm flex-col items-center gap-6 rounded-2xl border border-white/10 bg-[#0f1115] p-8 shadow-2xl">
+          <div className="flex flex-col items-center gap-2 text-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#a3e635]/10">
+              <KeyRound size={24} className="text-[#a3e635]" />
+            </div>
+            <h1 className="text-lg font-semibold text-white">{t("keyLoginTitle")}</h1>
+            <p className="text-xs text-white/50">{t("keyLoginSubtitle")}</p>
+          </div>
+          <KeyLoginForm />
+        </div>
+      </div>
+    );
+  }
+
+  return (
     <Overlay
       onPause={() => send("pause")}
       onResume={() => send("resume")}
@@ -76,30 +90,5 @@ export default function App() {
       onToggleScreenPanel={toggleScreenPanel}
       onLogout={handleLogout}
     />
-  );
-
-  // Key-mode: a pasted access key authenticates the user with no Clerk session,
-  // so render the app shell directly (Convex-bound EnsureConvexUser is skipped).
-  if (mode === "key") {
-    return <AuthGate>{overlay}</AuthGate>;
-  }
-
-  return (
-    <AuthGate>
-      <SignedIn>
-        <EnsureConvexUser />
-        {overlay}
-      </SignedIn>
-      <SignedOut>
-        <div className="flex h-screen w-screen items-center justify-center bg-gray-900 text-white" data-tauri-drag-region>
-          <div className="flex flex-col items-center gap-5">
-            <div className="rounded-xl bg-gray-800 p-8 shadow-xl">
-              <SignIn routing="virtual" />
-            </div>
-            <KeyLoginForm />
-          </div>
-        </div>
-      </SignedOut>
-    </AuthGate>
   );
 }

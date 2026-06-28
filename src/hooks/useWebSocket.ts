@@ -1,7 +1,5 @@
 import { useEffect, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { useMutation } from "convex/react";
-import { api } from "../../convex/_generated/api";
 import { useInterviewStore } from "../stores/interview";
 import type { Status } from "../stores/interview";
 import type { PlanInfo } from "../stores/slices/planSlice";
@@ -25,9 +23,7 @@ interface WSMessage {
 }
 
 export function useWebSocket() {
-  const { mode, isAuthed, getAuthParam } = useAppAuth();
-  const upsertPrompt = useMutation(api.prompts.upsertMyPrompt);
-  const clearPrompt = useMutation(api.prompts.clearMyPrompt);
+  const { isAuthed, getAuthParam } = useAppAuth();
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttemptsRef = useRef(0);
@@ -266,7 +262,7 @@ export function useWebSocket() {
       ws.close();
     };
     } catch (e) {
-      console.error("[WS] Failed to get Clerk token or connect:", e);
+      console.error("[WS] Failed to connect:", e);
     }
   }, [setStatus, setTranscription, addResponseChunk, clearResponse, clearAll, setError, incrementQuestionsAnswered, archiveCurrentQA, mergePlanInfo, updateQuotas, setLiveTranscriptionRemaining, setCountdownActive, setSessionStartTime, getAuthParam, isAuthed]);
 
@@ -301,28 +297,18 @@ export function useWebSocket() {
     console.log("[WS] setPrompt called with:", prompt.substring(0, 50) + "...");
     const language = useInterviewStore.getState().language as Language;
     useInterviewStore.getState().setCustomPrompt(language, prompt);
-    // Key-mode has no Clerk JWT, so the Convex mutation would fail; the prompt
-    // still applies for the live session via the WS command + local store.
-    if (mode !== "key") {
-      void upsertPrompt({ lang: language, promptText: prompt }).catch((err) =>
-        console.error("[WS] Failed to persist prompt to Convex:", err),
-      );
-    }
+    // Key-only auth: the prompt applies to the live session via the WS command
+    // + local store (no Clerk-authenticated Convex persistence in the desktop app).
     send(`set_prompt:${prompt}`);
-  }, [send, upsertPrompt, mode]);
+  }, [send]);
 
   const restoreDefaultPrompt = useCallback(() => {
     console.log("[WS] restoreDefaultPrompt called");
     send("clear_prompt");
     const language = useInterviewStore.getState().language as Language;
     useInterviewStore.getState().clearCustomPrompt(language);
-    if (mode !== "key") {
-      void clearPrompt({ lang: language }).catch((err) =>
-        console.error("[WS] Failed to clear prompt in Convex:", err),
-      );
-    }
     console.log("[WS] Zustand store cleared for language:", language);
-  }, [send, clearPrompt, mode]);
+  }, [send]);
 
   const changeLanguage = useCallback((language: string) => {
     send(`set_language:${language}`);

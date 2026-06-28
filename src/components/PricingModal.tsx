@@ -1,10 +1,8 @@
-import { useState } from "react";
-import { useQuery } from "convex/react";
-import { api } from "../../convex/_generated/api";
-import { X, Check, Crown, Loader2, AlertCircle, CreditCard, Ban } from "lucide-react";
+import { Crown, Check, X } from "lucide-react";
 import { useInterviewStore } from "../stores/interview";
 import { useTranslation } from "../hooks/useTranslation";
 import { useCheckout } from "../hooks/useCheckout";
+import { WEBSITE_UPGRADE_URL } from "../constants/links";
 import type { TranslationKey } from "../i18n/translations";
 import type { PlanId } from "../stores/slices/planSlice";
 
@@ -81,13 +79,6 @@ const tiers: TierInfo[] = [
   },
 ];
 
-const subStatusKeyMap: Record<string, TranslationKey> = {
-  active: "subActive",
-  canceled: "subCanceled",
-  past_due: "subPastDue",
-  paused: "subPaused",
-};
-
 interface PricingModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -97,24 +88,11 @@ export default function PricingModal({ isOpen, onClose }: PricingModalProps) {
   const { t } = useTranslation();
   const planInfo = useInterviewStore((s) => s.planInfo);
   const currentPlanId = planInfo?.plan_id ?? "free";
-  const { state: checkoutState, error: checkoutError, startCheckout, openExternalUrl } = useCheckout();
-  const [pendingPlan, setPendingPlan] = useState<string | null>(null);
-
-  const subscription = useQuery(api.users.getCurrentUserSubscription);
+  // Plans/billing are managed on the website (Clerk + Paddle); the desktop app
+  // only routes the user there. The in-app Paddle checkout was Clerk-auth-only.
+  const { openExternalUrl } = useCheckout();
 
   if (!isOpen) return null;
-
-  const hasActiveSub =
-    subscription?.paddleStatus === "active" && !!subscription.paddleSubscriptionId;
-
-  const handleSubscribe = async (planId: Exclude<PlanId, "free">) => {
-    setPendingPlan(planId);
-    await startCheckout(planId);
-  };
-
-  const subStatusLabel = subscription?.paddleStatus
-    ? t(subStatusKeyMap[subscription.paddleStatus] ?? "subActive")
-    : null;
 
   return (
     <div
@@ -141,54 +119,9 @@ export default function PricingModal({ isOpen, onClose }: PricingModalProps) {
           <p className="text-sm text-gray-400">{t("pricingSubtitle")}</p>
         </div>
 
-        {hasActiveSub && subStatusLabel && (
-          <div className="mb-5 flex items-center justify-center gap-3 rounded-lg border border-white/10 bg-white/5 px-4 py-2.5">
-            <span className="text-xs text-gray-400">{t("subStatus")}:</span>
-            <span
-              className={`text-xs font-semibold ${
-                subscription?.paddleStatus === "active"
-                  ? "text-green-400"
-                  : subscription?.paddleStatus === "past_due"
-                    ? "text-amber-400"
-                    : "text-gray-400"
-              }`}
-            >
-              {subStatusLabel}
-            </span>
-            {subscription?.paddleUpdatePaymentUrl && (
-              <button
-                onClick={() => openExternalUrl(subscription.paddleUpdatePaymentUrl!)}
-                className="ml-2 flex items-center gap-1 rounded-md bg-white/10 px-2 py-1 text-xs text-white hover:bg-white/20 transition-colors"
-              >
-                <CreditCard size={12} />
-                {t("btnUpdatePayment")}
-              </button>
-            )}
-            {subscription?.paddleCancelUrl && (
-              <button
-                onClick={() => openExternalUrl(subscription.paddleCancelUrl!)}
-                className="flex items-center gap-1 rounded-md bg-red-500/10 px-2 py-1 text-xs text-red-400 hover:bg-red-500/20 transition-colors"
-              >
-                <Ban size={12} />
-                {t("btnCancelSub")}
-              </button>
-            )}
-          </div>
-        )}
-
-        {checkoutState === "error" && checkoutError && (
-          <div className="mb-5 flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm text-red-400">
-            <AlertCircle size={16} />
-            <span>
-              {t("checkoutError")}: {checkoutError}
-            </span>
-          </div>
-        )}
-
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           {tiers.map((tier) => {
             const isCurrentPlan = currentPlanId === tier.id;
-            const isPending = pendingPlan === tier.id && checkoutState === "loading";
 
             return (
               <div
@@ -234,29 +167,21 @@ export default function PricingModal({ isOpen, onClose }: PricingModalProps) {
                   ))}
                 </div>
 
- <div className="mt-auto">
+                <div className="mt-auto">
                   {isCurrentPlan ? (
                     <div className="rounded-lg bg-white/10 py-2 text-center text-sm font-semibold text-white">
                       {t("btnCurrentPlan")}
                     </div>
                   ) : (
                     <button
-                      onClick={() => handleSubscribe(tier.id)}
-                      disabled={isPending || checkoutState === "loading"}
-                      className={`w-full rounded-lg py-2 text-center text-sm font-semibold transition-all disabled:opacity-50 ${
+                      onClick={() => openExternalUrl(WEBSITE_UPGRADE_URL)}
+                      className={`w-full rounded-lg py-2 text-center text-sm font-semibold transition-all ${
                         tier.popular
                           ? "bg-amber-400 text-black hover:bg-amber-300"
                           : "bg-white/10 text-white hover:bg-white/20"
                       }`}
                     >
-                      {isPending ? (
-                        <span className="flex items-center justify-center gap-2">
-                          <Loader2 size={14} className="animate-spin" />
-                          {t("checkoutRedirecting")}
-                        </span>
-                      ) : (
-                        t("btnSubscribe")
-                      )}
+                      {t("btnSubscribe")}
                     </button>
                   )}
                 </div>
