@@ -326,6 +326,36 @@ export const applySubscription = internalMutation({
   },
 });
 
+// Internal: resuelve el clerkId de un usuario a partir de sus IDs de Paddle. Lo usa
+// el webhook para procesar eventos `subscription.*`, que (a diferencia de las
+// transacciones) no traen clerk_id en custom_data. Usa los índices existentes.
+export const findClerkIdByPaddleIds = internalQuery({
+  args: {
+    paddleSubscriptionId: v.optional(v.string()),
+    paddleCustomerId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    let user: Doc<"users"> | null = null;
+    if (args.paddleSubscriptionId) {
+      const subId = args.paddleSubscriptionId;
+      user = await ctx.db
+        .query("users")
+        .withIndex("by_paddle_subscription", (q) =>
+          q.eq("paddleSubscriptionId", subId)
+        )
+        .unique();
+    }
+    if (!user && args.paddleCustomerId) {
+      const custId = args.paddleCustomerId;
+      user = await ctx.db
+        .query("users")
+        .withIndex("by_paddle_customer", (q) => q.eq("paddleCustomerId", custId))
+        .unique();
+    }
+    return user ? user.clerkId : null;
+  },
+});
+
 export const getCurrentUserSubscription = query({
   args: {},
   handler: async (ctx) => {
