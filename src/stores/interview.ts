@@ -35,7 +35,6 @@ export const useInterviewStore = create<RootState>()(
           qaHistory: [],
           error: null,
           questionsAnswered: 0,
-          planInfo: null,
           liveTranscriptionRemaining: null,
           countdownActive: false,
           sessionStartTime: null,

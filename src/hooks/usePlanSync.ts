@@ -4,14 +4,15 @@ import { invoke } from "@tauri-apps/api/core";
 import { api } from "../../convex/_generated/api";
 import { useInterviewStore } from "../stores/interview";
 import type { PlanInfo } from "../stores/slices/planSlice";
-import { useAppAuth } from "./useAppAuth";
 
 export function usePlanSync() {
-  const { mode } = useAppAuth();
-  // Key-mode has no Clerk JWT; plan info arrives via the WS PLAN_INFO message.
+  const userKey = useInterviewStore((s) => s.userKey);
+  // Key-only auth: resolve the plan from the pasted access key via the public
+  // query. Seeds planInfo on app open and stays reactive if the plan changes on
+  // the web (e.g. after an upgrade).
   const convexPlanInfo = useQuery(
-    api.users.getCurrentUserPlanInfo,
-    mode === "key" ? "skip" : {}
+    api.users.getPlanInfoByUserKey,
+    userKey ? { userKey } : "skip"
   );
   const mergePlanInfo = useInterviewStore((s) => s.mergePlanInfo);
 

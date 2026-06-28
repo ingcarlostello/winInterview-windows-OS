@@ -17,5 +17,5 @@ export const createAuthSlice: StateCreator<RootState, [], [], AuthSlice> = (
 ) => ({
   userKey: null,
   setUserKey: (key) => set({ userKey: key.trim() }),
-  clearUserKey: () => set({ userKey: null }),
+  clearUserKey: () => set({ userKey: null, planInfo: null }),
 });

@@ -126,6 +126,7 @@ export default function StatusBar({
   );
   const countdownActive = useInterviewStore((s) => s.countdownActive);
 
+  const planLoading = !planInfo;
   const planName = planInfo?.plan_name ?? "Free";
   const planId = planInfo?.plan_id ?? "free";
   const planColorClass =
@@ -224,7 +225,11 @@ export default function StatusBar({
             title={t("pricingTitle")}
           >
             <Crown size={12} />
-            <span className="text-[10px] font-medium">{planName}</span>
+            {planLoading ? (
+              <span className="inline-block h-3 w-10 rounded-full bg-white/10 animate-pulse" />
+            ) : (
+              <span className="text-[10px] font-medium">{planName}</span>
+            )}
           </button>
 
           {onLogout && (
@@ -247,17 +252,23 @@ export default function StatusBar({
           </div>
 
           <div
-            className={`flex items-center gap-1 px-2.5 py-1 rounded-full border ${quotaBadgeClass}`}
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-full border ${planLoading ? "border-white/10 bg-white/5 text-white/60" : quotaBadgeClass}`}
             title={
-              transcriptionExceeded
-                ? t("quotaExhaustedTooltip")
-                : t("timeRemaining", { count: minutesLeft })
+              planLoading
+                ? undefined
+                : transcriptionExceeded
+                  ? t("quotaExhaustedTooltip")
+                  : t("timeRemaining", { count: minutesLeft })
             }
           >
             <Clock size={12} />
-            <span className="text-[10px] font-medium">
-              {transcriptionExceeded ? "0m" : `${minutesLeft}m`}
-            </span>
+            {planLoading ? (
+              <span className="inline-block h-3 w-6 rounded-full bg-white/10 animate-pulse" />
+            ) : (
+              <span className="text-[10px] font-medium">
+                {transcriptionExceeded ? "0m" : `${minutesLeft}m`}
+              </span>
+            )}
           </div>
 
           <SessionTimer />

@@ -1,4 +1,6 @@
 import { mutation, query, internalMutation, internalQuery } from "./_generated/server";
+import type { QueryCtx } from "./_generated/server";
+import type { Doc } from "./_generated/dataModel";
 import { v } from "convex/values";
 import {
   PLAN_QUOTAS,
@@ -20,6 +22,51 @@ function buildFeatureFlags(planId: PlanId): Record<string, boolean> {
     flags[feature] = true;
   }
   return flags;
+}
+
+// Maps a users doc → the frontend `PlanInfo` shape (snake_case plan_id/quotas).
+// Shared by the Clerk-identity query (getCurrentUserPlanInfo) and the access-key
+// query (getPlanInfoByUserKey) so both return byte-identical plan info.
+async function buildPlanInfoForUser(ctx: QueryCtx, user: Doc<"users">) {
+  const planId = (user.planId as PlanId) ?? "free";
+  const month = new Date().toISOString().slice(0, 7);
+
+  const quota = await ctx.db
+    .query("quotas")
+    .withIndex("by_user_month", (q) =>
+      q.eq("userId", user._id).eq("month", month)
+    )
+    .unique();
+
+  const limits = PLAN_QUOTAS[planId] ?? PLAN_QUOTAS.free;
+
+  const transcriptionSecondsRemaining =
+    quota?.transcriptionSecondsRemaining ?? limits.transcriptionSeconds;
+  const capturesRemaining = quota?.capturesRemaining ?? limits.captures;
+  const analysesRemaining = quota?.analysesRemaining ?? limits.analyses;
+
+  return {
+    plan_id: planId,
+    plan_name: PLAN_NAMES[planId] ?? "Lite",
+    features: buildFeatureFlags(planId),
+    quotas: {
+      transcription_seconds: {
+        used: Math.max(0, limits.transcriptionSeconds - transcriptionSecondsRemaining),
+        limit: limits.transcriptionSeconds,
+        remaining: transcriptionSecondsRemaining,
+      },
+      screen_captures: {
+        used: Math.max(0, limits.captures - capturesRemaining),
+        limit: limits.captures,
+        remaining: capturesRemaining,
+      },
+      screen_analyses: {
+        used: Math.max(0, limits.analyses - analysesRemaining),
+        limit: limits.analyses,
+        remaining: analysesRemaining,
+      },
+    },
+  };
 }
 
 export const getUserAndQuotaByClerkId = internalQuery({
@@ -177,47 +224,35 @@ export const getCurrentUserPlanInfo = query({
       return null;
     }
 
-    const planId = (user.planId as PlanId) ?? "free";
-    const month = new Date().toISOString().slice(0, 7);
+    return buildPlanInfoForUser(ctx, user);
+  },
+});
 
-    const quota = await ctx.db
-      .query("quotas")
-      .withIndex("by_user_month", (q) =>
-        q.eq("userId", user._id).eq("month", month)
-      )
+// Public: access-key counterpart of getCurrentUserPlanInfo. A desktop session that
+// logged in with a pasted access key has no Clerk JWT, so it cannot use the
+// identity-based query above; it resolves the user by their userKey instead and
+// returns the same PlanInfo shape. The userKey is a high-entropy bearer secret the
+// caller already holds (it grants full app login), so exposing plan metadata to its
+// holder adds no meaningful surface. Returns null for an unknown/empty key.
+export const getPlanInfoByUserKey = query({
+  args: {
+    userKey: v.string(),
+  },
+  handler: async (ctx, args) => {
+    if (!args.userKey) {
+      return null;
+    }
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_user_key", (q) => q.eq("userKey", args.userKey))
       .unique();
 
-    const limits = PLAN_QUOTAS[planId] ?? PLAN_QUOTAS.free;
+    if (!user) {
+      return null;
+    }
 
-    const transcriptionSecondsRemaining =
-      quota?.transcriptionSecondsRemaining ?? limits.transcriptionSeconds;
-    const capturesRemaining =
-      quota?.capturesRemaining ?? limits.captures;
-    const analysesRemaining =
-      quota?.analysesRemaining ?? limits.analyses;
-
-    return {
-      plan_id: planId,
-      plan_name: PLAN_NAMES[planId] ?? "Lite",
-      features: buildFeatureFlags(planId),
-      quotas: {
-        transcription_seconds: {
-          used: Math.max(0, limits.transcriptionSeconds - transcriptionSecondsRemaining),
-          limit: limits.transcriptionSeconds,
-          remaining: transcriptionSecondsRemaining,
-        },
-        screen_captures: {
-          used: Math.max(0, limits.captures - capturesRemaining),
-          limit: limits.captures,
-          remaining: capturesRemaining,
-        },
-        screen_analyses: {
-          used: Math.max(0, limits.analyses - analysesRemaining),
-          limit: limits.analyses,
-          remaining: analysesRemaining,
-        },
-      },
-    };
+    return buildPlanInfoForUser(ctx, user);
   },
 });
 
