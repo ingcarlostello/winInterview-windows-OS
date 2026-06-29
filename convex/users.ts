@@ -1,6 +1,6 @@
 import { mutation, query, internalMutation, internalQuery } from "./_generated/server";
-import type { QueryCtx } from "./_generated/server";
-import type { Doc } from "./_generated/dataModel";
+import type { QueryCtx, MutationCtx } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import {
   PLAN_QUOTAS,
@@ -256,6 +256,93 @@ export const getPlanInfoByUserKey = query({
   },
 });
 
+// Asegura que exista la fila de cuota del mes en curso y, si el plan cambió,
+// reinicia los *remaining* a los límites del nuevo plan. Misma semántica que antes.
+async function ensureQuotaForPlan(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  planId: PlanId,
+  planChanged: boolean
+): Promise<void> {
+  const month = new Date().toISOString().slice(0, 7);
+  const existingQuota = await ctx.db
+    .query("quotas")
+    .withIndex("by_user_month", (q) => q.eq("userId", userId).eq("month", month))
+    .unique();
+
+  const newQuotas = PLAN_QUOTAS[planId];
+
+  if (existingQuota) {
+    if (planChanged) {
+      await ctx.db.patch(existingQuota._id, {
+        transcriptionSecondsRemaining: newQuotas.transcriptionSeconds,
+        capturesRemaining: newQuotas.captures,
+        analysesRemaining: newQuotas.analyses,
+      });
+    }
+  } else {
+    await ctx.db.insert("quotas", {
+      userId,
+      month,
+      transcriptionSecondsRemaining: newQuotas.transcriptionSeconds,
+      capturesRemaining: newQuotas.captures,
+      analysesRemaining: newQuotas.analyses,
+    });
+  }
+}
+
+type ScheduledChangeArg =
+  | { action: string; effectiveAt?: string }
+  | null
+  | undefined;
+
+// Único punto de escritura del plan + metadata de Paddle sobre la fila de usuario.
+// `scheduledChange`: `undefined` no toca el campo, `null` lo limpia, objeto lo fija.
+// `clearPending`: borra el downgrade programado (pendingPlan*) cuando se aplica o anula.
+async function persistPlan(
+  ctx: MutationCtx,
+  user: Doc<"users">,
+  opts: {
+    planId: PlanId;
+    paddleCustomerId?: string;
+    paddleSubscriptionId?: string;
+    paddleStatus?: string;
+    paddleCancelUrl?: string;
+    paddleUpdatePaymentUrl?: string;
+    subscriptionCurrentPeriodEnd?: string;
+    scheduledChange?: ScheduledChangeArg;
+    clearPending?: boolean;
+  }
+): Promise<void> {
+  const previousPlanId = user.planId as PlanId;
+  const patch: Record<string, unknown> = { planId: opts.planId };
+
+  if (opts.paddleCustomerId !== undefined) patch.paddleCustomerId = opts.paddleCustomerId;
+  if (opts.paddleSubscriptionId !== undefined) patch.paddleSubscriptionId = opts.paddleSubscriptionId;
+  if (opts.paddleStatus !== undefined) patch.paddleStatus = opts.paddleStatus;
+  if (opts.paddleCancelUrl !== undefined) patch.paddleCancelUrl = opts.paddleCancelUrl;
+  if (opts.paddleUpdatePaymentUrl !== undefined) patch.paddleUpdatePaymentUrl = opts.paddleUpdatePaymentUrl;
+  if (opts.subscriptionCurrentPeriodEnd !== undefined)
+    patch.subscriptionCurrentPeriodEnd = opts.subscriptionCurrentPeriodEnd;
+
+  // En Convex, patch a `undefined` elimina el campo.
+  if (opts.scheduledChange === null) {
+    patch.subscriptionScheduledChangeAction = undefined;
+    patch.subscriptionScheduledChangeEffectiveAt = undefined;
+  } else if (opts.scheduledChange) {
+    patch.subscriptionScheduledChangeAction = opts.scheduledChange.action;
+    patch.subscriptionScheduledChangeEffectiveAt = opts.scheduledChange.effectiveAt;
+  }
+
+  if (opts.clearPending) {
+    patch.pendingPlanId = undefined;
+    patch.pendingPlanEffectiveAt = undefined;
+  }
+
+  await ctx.db.patch(user._id, patch);
+  await ensureQuotaForPlan(ctx, user._id, opts.planId, previousPlanId !== opts.planId);
+}
+
 export const applySubscription = internalMutation({
   args: {
     clerkId: v.string(),
@@ -266,6 +353,10 @@ export const applySubscription = internalMutation({
     paddleCancelUrl: v.optional(v.string()),
     paddleUpdatePaymentUrl: v.optional(v.string()),
     subscriptionCurrentPeriodEnd: v.optional(v.string()),
+    // Cambio programado de Paddle: `undefined` no toca, `null` limpia, objeto fija.
+    scheduledChange: v.optional(
+      v.union(v.null(), v.object({ action: v.string(), effectiveAt: v.optional(v.string()) }))
+    ),
   },
   handler: async (ctx, args) => {
     if (!PLAN_QUOTAS[args.planId as PlanId]) {
@@ -281,48 +372,149 @@ export const applySubscription = internalMutation({
       throw new Error("User not found");
     }
 
-    const planId = args.planId as PlanId;
-    const previousPlanId = user.planId as PlanId;
-
-    const patch: Record<string, unknown> = { planId };
-    if (args.paddleCustomerId !== undefined) patch.paddleCustomerId = args.paddleCustomerId;
-    if (args.paddleSubscriptionId !== undefined) patch.paddleSubscriptionId = args.paddleSubscriptionId;
-    if (args.paddleStatus !== undefined) patch.paddleStatus = args.paddleStatus;
-    if (args.paddleCancelUrl !== undefined) patch.paddleCancelUrl = args.paddleCancelUrl;
-    if (args.paddleUpdatePaymentUrl !== undefined) patch.paddleUpdatePaymentUrl = args.paddleUpdatePaymentUrl;
-    if (args.subscriptionCurrentPeriodEnd !== undefined) patch.subscriptionCurrentPeriodEnd = args.subscriptionCurrentPeriodEnd;
-
-    await ctx.db.patch(user._id, patch);
-
-    const month = new Date().toISOString().slice(0, 7);
-    const existingQuota = await ctx.db
-      .query("quotas")
-      .withIndex("by_user_month", (q) =>
-        q.eq("userId", user._id).eq("month", month)
-      )
-      .unique();
-
-    const newQuotas = PLAN_QUOTAS[planId];
-
-    if (existingQuota) {
-      if (previousPlanId !== planId) {
-        await ctx.db.patch(existingQuota._id, {
-          transcriptionSecondsRemaining: newQuotas.transcriptionSeconds,
-          capturesRemaining: newQuotas.captures,
-          analysesRemaining: newQuotas.analyses,
-        });
+    // Regla de downgrade programado: el plan efectivo no siempre es el del evento.
+    // Si hay un downgrade pendiente y AÚN no vence, conservamos el plan ALTO actual
+    // aunque los ítems de Paddle ya muestren el bajo (efecto del do_not_bill). Al
+    // vencer, aplicamos el bajo y limpiamos el pendiente. Una cancelación (incoming
+    // "free") siempre gana: revierte a free y limpia el pendiente.
+    let finalPlanId = args.planId as PlanId;
+    let clearPending = false;
+    if (user.pendingPlanId && user.pendingPlanEffectiveAt) {
+      const dueAt = Date.parse(user.pendingPlanEffectiveAt);
+      const due = Number.isFinite(dueAt) && dueAt <= Date.now();
+      const incomingEntitled = args.planId !== "free";
+      if (!incomingEntitled) {
+        finalPlanId = "free";
+        clearPending = true;
+      } else if (due) {
+        finalPlanId = user.pendingPlanId as PlanId;
+        clearPending = true;
+      } else {
+        finalPlanId = user.planId as PlanId; // gracia: mantener plan alto
       }
-    } else {
-      await ctx.db.insert("quotas", {
-        userId: user._id,
-        month,
-        transcriptionSecondsRemaining: newQuotas.transcriptionSeconds,
-        capturesRemaining: newQuotas.captures,
-        analysesRemaining: newQuotas.analyses,
-      });
     }
 
+    await persistPlan(ctx, user, {
+      planId: finalPlanId,
+      paddleCustomerId: args.paddleCustomerId,
+      paddleSubscriptionId: args.paddleSubscriptionId,
+      paddleStatus: args.paddleStatus,
+      paddleCancelUrl: args.paddleCancelUrl,
+      paddleUpdatePaymentUrl: args.paddleUpdatePaymentUrl,
+      subscriptionCurrentPeriodEnd: args.subscriptionCurrentPeriodEnd,
+      scheduledChange: args.scheduledChange,
+      clearPending,
+    });
+
     return user._id;
+  },
+});
+
+// Programa un downgrade a aplicar al final del ciclo (lo invoca la action
+// changeSubscriptionPlan ANTES de tocar Paddle, para ganar la carrera con el webhook).
+export const setPendingPlanChange = internalMutation({
+  args: {
+    clerkId: v.string(),
+    pendingPlanId: v.string(),
+    pendingPlanEffectiveAt: v.string(),
+  },
+  handler: async (ctx, args) => {
+    if (!PLAN_QUOTAS[args.pendingPlanId as PlanId]) {
+      throw new Error(`Invalid plan: ${args.pendingPlanId}`);
+    }
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
+      .unique();
+    if (!user) throw new Error("User not found");
+
+    await ctx.db.patch(user._id, {
+      pendingPlanId: args.pendingPlanId,
+      pendingPlanEffectiveAt: args.pendingPlanEffectiveAt,
+    });
+    return user._id;
+  },
+});
+
+// Anula un downgrade programado (botón "Deshacer" o upgrade que lo reemplaza).
+export const clearPendingPlanChange = internalMutation({
+  args: { clerkId: v.string() },
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
+      .unique();
+    if (!user) return null;
+
+    await ctx.db.patch(user._id, {
+      pendingPlanId: undefined,
+      pendingPlanEffectiveAt: undefined,
+    });
+    return user._id;
+  },
+});
+
+// Backstop del cron diario: aplica los downgrades cuya fecha ya venció por si el
+// webhook de renovación no llegó. El camino normal lo resuelve el webhook.
+export const applyDuePendingDowngrades = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = new Date().toISOString();
+    const candidates = await ctx.db
+      .query("users")
+      .withIndex("by_pending_effective", (q) => q.lte("pendingPlanEffectiveAt", now))
+      .collect();
+
+    let applied = 0;
+    for (const user of candidates) {
+      if (!user.pendingPlanId || !user.pendingPlanEffectiveAt) continue;
+      if (user.pendingPlanEffectiveAt > now) continue;
+
+      // Si la suscripción sigue vigente, aplicamos el plan bajo; si ya no (cancelada,
+      // etc.), el webhook ya la mandó a free — solo limpiamos el pendiente.
+      const entitled = user.paddleStatus === "active" || user.paddleStatus === "trialing";
+      const targetPlan = (entitled ? user.pendingPlanId : user.planId) as PlanId;
+      if (!PLAN_QUOTAS[targetPlan]) {
+        await ctx.db.patch(user._id, { pendingPlanId: undefined, pendingPlanEffectiveAt: undefined });
+        continue;
+      }
+      await persistPlan(ctx, user, { planId: targetPlan, clearPending: true });
+      applied++;
+    }
+    return { scanned: candidates.length, applied };
+  },
+});
+
+// Idempotencia del webhook: ¿ya procesamos este event_id de Paddle?
+export const isEventProcessed = internalQuery({
+  args: { paddleEventId: v.string() },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("subscriptionEvents")
+      .withIndex("by_event_id", (q) => q.eq("paddleEventId", args.paddleEventId))
+      .unique();
+    return existing !== null;
+  },
+});
+
+// Registra un evento de Paddle como procesado (auditoría + dedupe). No-op si ya existe.
+export const recordSubscriptionEvent = internalMutation({
+  args: {
+    paddleEventId: v.string(),
+    eventType: v.string(),
+    occurredAt: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("subscriptionEvents")
+      .withIndex("by_event_id", (q) => q.eq("paddleEventId", args.paddleEventId))
+      .unique();
+    if (existing) return existing._id;
+    return await ctx.db.insert("subscriptionEvents", {
+      paddleEventId: args.paddleEventId,
+      eventType: args.eventType,
+      occurredAt: args.occurredAt,
+    });
   },
 });
 
@@ -382,6 +574,12 @@ export const getCurrentUserSubscription = query({
       paddleCancelUrl: user.paddleCancelUrl ?? null,
       paddleUpdatePaymentUrl: user.paddleUpdatePaymentUrl ?? null,
       subscriptionCurrentPeriodEnd: user.subscriptionCurrentPeriodEnd ?? null,
+      // Estado "cancelación pendiente" (scheduled_change nativo de Paddle).
+      scheduledChangeAction: user.subscriptionScheduledChangeAction ?? null,
+      scheduledChangeEffectiveAt: user.subscriptionScheduledChangeEffectiveAt ?? null,
+      // Estado "downgrade programado" (gestionado por la app).
+      pendingPlanId: user.pendingPlanId ?? null,
+      pendingPlanEffectiveAt: user.pendingPlanEffectiveAt ?? null,
     };
   },
 });
