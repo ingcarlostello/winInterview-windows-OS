@@ -1,7 +1,9 @@
 import { httpAction, action } from "./_generated/server";
+import type { ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { api } from "./_generated/api";
 import { v } from "convex/values";
+import { PLAN_RANK, type PlanId } from "./constants";
 
 declare const process: { env: Record<string, string | undefined> };
 
@@ -86,6 +88,7 @@ type PaddleSubscriptionData = {
     cancel?: string;
   } | null;
   current_billing_period?: { ends_at?: string } | null;
+  scheduled_change?: { action?: string; effective_at?: string; resume_at?: string } | null;
 };
 
 type PaddleTransactionData = {
@@ -166,8 +169,21 @@ export const paddleWebhook = httpAction(async (ctx, request) => {
   // custom_data (solo la transacción). Para esos, el usuario se resuelve por sus IDs
   // de Paddle dentro de handleSubscriptionEvent. `transaction.completed` sí debe traerlo.
   const clerkId = extractClerkId(data);
+  const eventId = event.event_id;
+  const occurredAt = event.occurred_at ?? new Date().toISOString();
 
   try {
+    // Idempotencia: si ya procesamos este event_id, responder 200 sin reprocesar.
+    if (
+      eventId &&
+      (await ctx.runQuery(internal.users.isEventProcessed, { paddleEventId: eventId }))
+    ) {
+      return new Response(JSON.stringify({ ok: true, deduped: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
     if (eventType.startsWith("subscription.")) {
       await handleSubscriptionEvent(ctx, eventType, data as PaddleSubscriptionData, clerkId);
     } else if (eventType === "transaction.completed") {
@@ -183,6 +199,15 @@ export const paddleWebhook = httpAction(async (ctx, request) => {
       console.warn(`[Paddle webhook] Payment failed${clerkId ? ` for clerk ${clerkId}` : ""}`);
     } else {
       console.log(`[Paddle webhook] Unhandled event type: ${eventType}`);
+    }
+
+    // Marcar como procesado solo tras éxito (un evento fallido se reintenta).
+    if (eventId) {
+      await ctx.runMutation(internal.users.recordSubscriptionEvent, {
+        paddleEventId: eventId,
+        eventType,
+        occurredAt,
+      });
     }
 
     return new Response(JSON.stringify({ ok: true }), {
@@ -249,6 +274,20 @@ async function handleSubscriptionEvent(
     planId = extracted;
   }
 
+  // scheduled_change de Paddle: objeto (cancel/pause/resume programado) o null (sin
+  // cambio). `undefined` => el payload no lo trae => no tocamos el campo guardado.
+  let scheduledChange: { action: string; effectiveAt?: string } | null | undefined;
+  if (data.scheduled_change === null) {
+    scheduledChange = null;
+  } else if (data.scheduled_change && data.scheduled_change.action) {
+    scheduledChange = {
+      action: data.scheduled_change.action,
+      effectiveAt: data.scheduled_change.effective_at,
+    };
+  } else {
+    scheduledChange = undefined;
+  }
+
   await ctx.runMutation(internal.users.applySubscription, {
     clerkId,
     planId,
@@ -258,6 +297,7 @@ async function handleSubscriptionEvent(
     paddleCancelUrl: managementUrls?.cancel ?? undefined,
     paddleUpdatePaymentUrl: managementUrls?.update_payment_method ?? undefined,
     subscriptionCurrentPeriodEnd: currentPeriodEnd,
+    scheduledChange,
   });
   console.log(
     `[Paddle webhook] ${eventType} (status ${status}) → plan ${planId} for clerk ${clerkId}`
@@ -403,3 +443,278 @@ async function findOrCreatePaddleCustomer(
   const customerBody = (await createResponse.json()) as { data?: Record<string, unknown> };
   return customerBody.data?.id as string | undefined;
 }
+
+// ---------------------------------------------------------------------------
+// Portal de facturación self-service: acciones que llaman a la API de Paddle.
+// Todas se atan a la identidad de Clerk y validan ownership de la suscripción.
+// ---------------------------------------------------------------------------
+
+// Helper REST con auth Bearer. Devuelve el objeto `data` de la respuesta de Paddle.
+async function paddleApi(
+  path: string,
+  method: string,
+  body?: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  const response = await fetch(`${PADDLE_API_URL}${path}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${PADDLE_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!response.ok) {
+    const errorBody = await response.text();
+    console.error(`[Paddle ${method} ${path}] ${response.status}:`, errorBody);
+    throw new Error(`Paddle API error: ${response.status} ${errorBody}`);
+  }
+  const json = (await response.json()) as { data?: Record<string, unknown> };
+  return json.data ?? {};
+}
+
+function planRank(planId: string): number {
+  return PLAN_RANK[planId as PlanId] ?? 0;
+}
+
+function readPeriodEnd(sub: Record<string, unknown>): string | undefined {
+  const cbp = sub.current_billing_period as { ends_at?: string } | undefined | null;
+  return cbp?.ends_at ?? undefined;
+}
+
+function readScheduledChange(
+  sub: Record<string, unknown>
+): { action: string; effectiveAt?: string } | null {
+  const sc = sub.scheduled_change as { action?: string; effective_at?: string } | undefined | null;
+  if (sc && sc.action) return { action: sc.action, effectiveAt: sc.effective_at };
+  return null;
+}
+
+function readManagementUrls(sub: Record<string, unknown>): {
+  cancel?: string;
+  update?: string;
+} {
+  const mu = sub.management_urls as
+    | { cancel?: string; update_payment_method?: string }
+    | undefined
+    | null;
+  return { cancel: mu?.cancel, update: mu?.update_payment_method };
+}
+
+// Espeja en Convex la entidad de suscripción devuelta por Paddle (write-through
+// optimista). El webhook reconcilia después; ambos pasan por applySubscription.
+async function writeThroughFromSubscription(
+  ctx: ActionCtx,
+  clerkId: string,
+  planId: string,
+  sub: Record<string, unknown>
+): Promise<void> {
+  const mu = readManagementUrls(sub);
+  await ctx.runMutation(internal.users.applySubscription, {
+    clerkId,
+    planId,
+    paddleStatus: typeof sub.status === "string" ? sub.status : undefined,
+    paddleSubscriptionId: typeof sub.id === "string" ? sub.id : undefined,
+    paddleCustomerId: typeof sub.customer_id === "string" ? sub.customer_id : undefined,
+    paddleCancelUrl: mu.cancel,
+    paddleUpdatePaymentUrl: mu.update,
+    subscriptionCurrentPeriodEnd: readPeriodEnd(sub),
+    scheduledChange: readScheduledChange(sub),
+  });
+}
+
+// Cambia el plan. Upgrade (sube de rango) → inmediato con prorrateo. Downgrade
+// (baja de rango) → programado al final del ciclo (pendingPlan* + do_not_bill).
+export const changeSubscriptionPlan = action({
+  args: { planId: v.string() },
+  handler: async (ctx, args) => {
+    if (!PADDLE_API_KEY) throw new Error("PADDLE_API_KEY not configured");
+    const validPlans = ["lite", "pro", "ultra"];
+    if (!validPlans.includes(args.planId)) throw new Error(`Invalid plan: ${args.planId}`);
+
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthenticated");
+    const clerkId = identity.subject;
+
+    const user = await ctx.runQuery(api.users.getCurrentUser, {});
+    if (!user) throw new Error("User not found");
+    const subscriptionId = user.paddleSubscriptionId;
+    if (!subscriptionId) {
+      throw new Error("No active subscription to change. Use checkout to start one.");
+    }
+
+    const priceId = getPriceId(args.planId);
+    if (!priceId) throw new Error(`No Paddle price ID configured for plan: ${args.planId}`);
+
+    const currentRank = planRank(user.planId);
+    const targetRank = planRank(args.planId);
+    const items = [{ price_id: priceId, quantity: 1 }];
+
+    // Mismo plan: si hay un downgrade programado, "deshacer" (restaurar ítems al plan
+    // actual y limpiar el pendiente). Sin pendiente no hay nada que hacer.
+    if (targetRank === currentRank) {
+      if (user.pendingPlanId) {
+        await ctx.runMutation(internal.users.clearPendingPlanChange, { clerkId });
+        const sub = await paddleApi(`/subscriptions/${subscriptionId}`, "PATCH", {
+          items,
+          proration_billing_mode: "do_not_bill",
+        });
+        await writeThroughFromSubscription(ctx, clerkId, user.planId, sub);
+      }
+      return { ok: true, direction: "none" as const };
+    }
+
+    if (targetRank > currentRank) {
+      // UPGRADE inmediato con prorrateo. Un downgrade pendiente queda sin efecto.
+      await ctx.runMutation(internal.users.clearPendingPlanChange, { clerkId });
+      const sub = await paddleApi(`/subscriptions/${subscriptionId}`, "PATCH", {
+        items,
+        proration_billing_mode: "prorated_immediately",
+        on_payment_failure: "prevent_change",
+      });
+      await writeThroughFromSubscription(ctx, clerkId, args.planId, sub);
+      return { ok: true, direction: "upgrade" as const };
+    }
+
+    // DOWNGRADE al final del ciclo. Fijamos el pendiente ANTES de tocar Paddle (gana
+    // la carrera con el webhook del PATCH), luego cambiamos ítems sin cobrar: el
+    // precio menor se cobra en la próxima renovación. El plan alto se conserva hasta
+    // la fecha (regla en applySubscription + cron backstop).
+    const knownEnd = user.subscriptionCurrentPeriodEnd ?? "";
+    await ctx.runMutation(internal.users.setPendingPlanChange, {
+      clerkId,
+      pendingPlanId: args.planId,
+      pendingPlanEffectiveAt: knownEnd,
+    });
+    const sub = await paddleApi(`/subscriptions/${subscriptionId}`, "PATCH", {
+      items,
+      proration_billing_mode: "do_not_bill",
+    });
+    const effectiveAt = readPeriodEnd(sub) ?? knownEnd;
+    if (effectiveAt && effectiveAt !== knownEnd) {
+      await ctx.runMutation(internal.users.setPendingPlanChange, {
+        clerkId,
+        pendingPlanId: args.planId,
+        pendingPlanEffectiveAt: effectiveAt,
+      });
+    }
+    return { ok: true, direction: "downgrade" as const, effectiveAt: effectiveAt || null };
+  },
+});
+
+// Previsualiza el prorrateo de un cambio de plan sin aplicarlo (read-only).
+export const previewSubscriptionChange = action({
+  args: { planId: v.string() },
+  handler: async (ctx, args) => {
+    if (!PADDLE_API_KEY) throw new Error("PADDLE_API_KEY not configured");
+    const validPlans = ["lite", "pro", "ultra"];
+    if (!validPlans.includes(args.planId)) throw new Error(`Invalid plan: ${args.planId}`);
+
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthenticated");
+
+    const user = await ctx.runQuery(api.users.getCurrentUser, {});
+    if (!user) throw new Error("User not found");
+    const subscriptionId = user.paddleSubscriptionId;
+    if (!subscriptionId) throw new Error("No active subscription.");
+
+    const priceId = getPriceId(args.planId);
+    if (!priceId) throw new Error(`No Paddle price ID configured for plan: ${args.planId}`);
+
+    const prorationMode =
+      planRank(args.planId) > planRank(user.planId) ? "prorated_immediately" : "do_not_bill";
+
+    const sub = await paddleApi(`/subscriptions/${subscriptionId}/preview`, "POST", {
+      items: [{ price_id: priceId, quantity: 1 }],
+      proration_billing_mode: prorationMode,
+    });
+
+    // immediate_transaction.details.totals.grand_total: string en la menor denominación.
+    const immediate = sub.immediate_transaction as
+      | { details?: { totals?: { grand_total?: string; currency_code?: string } } }
+      | undefined
+      | null;
+    const totals = immediate?.details?.totals;
+    return {
+      immediateAmount: totals?.grand_total ?? null,
+      currencyCode: totals?.currency_code ?? null,
+      nextBilledAt: typeof sub.next_billed_at === "string" ? sub.next_billed_at : null,
+    };
+  },
+});
+
+// Cancela al final del ciclo (periodo de gracia). status sigue "active" + scheduled_change cancel.
+export const cancelSubscription = action({
+  args: {},
+  handler: async (ctx) => {
+    if (!PADDLE_API_KEY) throw new Error("PADDLE_API_KEY not configured");
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthenticated");
+    const clerkId = identity.subject;
+
+    const user = await ctx.runQuery(api.users.getCurrentUser, {});
+    if (!user) throw new Error("User not found");
+    const subscriptionId = user.paddleSubscriptionId;
+    if (!subscriptionId) throw new Error("No active subscription to cancel.");
+
+    const sub = await paddleApi(`/subscriptions/${subscriptionId}/cancel`, "POST", {
+      effective_from: "next_billing_period",
+    });
+    await writeThroughFromSubscription(ctx, clerkId, user.planId, sub);
+    return {
+      ok: true,
+      effectiveAt: readScheduledChange(sub)?.effectiveAt ?? readPeriodEnd(sub) ?? null,
+    };
+  },
+});
+
+// Reactiva durante la gracia: quita la cancelación programada (scheduled_change: null).
+export const reactivateSubscription = action({
+  args: {},
+  handler: async (ctx) => {
+    if (!PADDLE_API_KEY) throw new Error("PADDLE_API_KEY not configured");
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthenticated");
+    const clerkId = identity.subject;
+
+    const user = await ctx.runQuery(api.users.getCurrentUser, {});
+    if (!user) throw new Error("User not found");
+    const subscriptionId = user.paddleSubscriptionId;
+    if (!subscriptionId) {
+      throw new Error("No subscription to reactivate. Start a new checkout.");
+    }
+    if (user.subscriptionScheduledChangeAction !== "cancel") {
+      throw new Error("No pending cancellation to reactivate.");
+    }
+
+    const sub = await paddleApi(`/subscriptions/${subscriptionId}`, "PATCH", {
+      scheduled_change: null,
+    });
+    await writeThroughFromSubscription(ctx, clerkId, user.planId, sub);
+    return { ok: true };
+  },
+});
+
+// Devuelve un transactionId para actualizar el método de pago vía overlay Paddle.js.
+export const updatePaymentMethod = action({
+  args: {},
+  handler: async (ctx) => {
+    if (!PADDLE_API_KEY) throw new Error("PADDLE_API_KEY not configured");
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthenticated");
+
+    const user = await ctx.runQuery(api.users.getCurrentUser, {});
+    if (!user) throw new Error("User not found");
+    const subscriptionId = user.paddleSubscriptionId;
+    if (!subscriptionId) throw new Error("No active subscription.");
+
+    const txn = await paddleApi(
+      `/subscriptions/${subscriptionId}/update-payment-method-transaction`,
+      "GET"
+    );
+    const transactionId = txn.id;
+    if (typeof transactionId !== "string") {
+      throw new Error("Paddle did not return a transaction ID");
+    }
+    return { transactionId };
+  },
+});

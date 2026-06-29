@@ -363,7 +363,7 @@ The Python backend (`backend/src/backend/auth/clerk.py`) independently verifies 
 
 ## Billing (Paddle)
 
-The app uses **Paddle** for subscription billing. Paddle manages checkout, payment, and subscription lifecycle via webhooks to Convex.
+The app uses **Paddle** for subscription billing. Paddle manages checkout, payment, and subscription lifecycle via webhooks to Convex. Self-service portal lets users upgrade/downgrade, preview changes, cancel, and reactivate via actions.
 
 ### Architecture
 
@@ -371,7 +371,12 @@ The app uses **Paddle** for subscription billing. Paddle manages checkout, payme
 - **Convex** receives webhooks from Paddle and updates `users.planId` + paddle fields
 - The `free` tier is the default for users without a subscription (3 min transcription, 0 captures/analyses)
 - Lite/Pro/Ultra are paid tiers ($4.99/$19.99/$59.99 monthly) — subscription required to unlock
-- Flow: User clicks "Subscribe" → `createCheckout` action creates Paddle transaction → Tauri opens hosted checkout URL → user pays → Paddle webhook → `applySubscription` mutation → `planId` updated → reactive query auto-updates frontend
+- **Plan changes** (upgrade/downgrade):
+  - **Upgrade** (rank increases) → immediate with prorated charge (`proration_billing_mode: "prorated_immediately"`)
+  - **Downgrade** (rank decreases) → scheduled for end of billing period (`proration_billing_mode: "do_not_bill"`); user keeps current high plan until `pendingPlanEffectiveAt`; backend stores `pendingPlanId` to apply later
+  - **Cancellation** → scheduled for end of period (`scheduled_change: { action: "cancel" }`); user keeps access until effective date
+- **Webhook idempotence** → each Paddle `event_id` checked against `subscriptionEvents` table; deduped events return 200 without reprocessing
+- **Cron backstop** → daily `applyDuePendingDowngrades` task applies downgrades past their effective date (fallback if renewal webhook misses)
 
 ### Paddle Configuration
 
@@ -408,7 +413,7 @@ Frontend (PricingModal) → useCheckout → Convex action: paddle.createCheckout
 | Event | Action |
 |---|---|
 | `subscription.activated` | Set plan from price.custom_data.plan_id |
-| `subscription.updated` | Update plan (upgrade/downgrade) |
+| `subscription.updated` | Update plan; capture `scheduled_change` (cancel/pause/resume programmed), detect downgrades (store `pendingPlanId` + `pendingPlanEffectiveAt` if lowering rank) |
 | `subscription.created` | Store subscription data |
 | `subscription.canceled` | Revert to `free` |
 | `subscription.past_due` | Revert to `free` |
@@ -416,6 +421,7 @@ Frontend (PricingModal) → useCheckout → Convex action: paddle.createCheckout
 | `subscription.resumed` | Restore plan from price.custom_data.plan_id |
 | `transaction.completed` | Backup confirmation — set plan |
 | `transaction.payment_failed` | Log warning |
+| *(all events)* | Record `event_id` in `subscriptionEvents` table for idempotence + audit trail |
 
 ### Convex Schema (Paddle fields on `users`)
 
@@ -425,16 +431,29 @@ Frontend (PricingModal) → useCheckout → Convex action: paddle.createCheckout
 - `paddleCancelUrl` — Management URL for cancellation
 - `paddleUpdatePaymentUrl` — Management URL for payment method update
 - `subscriptionCurrentPeriodEnd` — Current billing period end date
-- Indexes: `by_paddle_customer`, `by_paddle_subscription`
+- `subscriptionScheduledChangeAction` — Paddle's native `scheduled_change.action` (e.g., `"cancel"`, `"pause"`) or `undefined` if none
+- `subscriptionScheduledChangeEffectiveAt` — When the scheduled change takes effect (ISO string)
+- `pendingPlanId` — App-managed downgrade: plan to apply at end of period (e.g., `"lite"` if user had `"pro"`)
+- `pendingPlanEffectiveAt` — When the pending downgrade applies (ISO string, = end of current billing period)
+- Indexes: `by_paddle_customer`, `by_paddle_subscription`, `by_pending_effective` (for cron backstop)
+
+**`subscriptionEvents` table** (audit + idempotence):
+- `userId` — Link to user (optional)
+- `paddleEventId` — Unique event ID from Paddle (dedupe key)
+- `eventType` — Event type (e.g., `subscription.updated`)
+- `occurredAt` — When Paddle generated the event (ISO string)
+- `raw` — Full webhook payload (optional)
+- Indexes: `by_event_id` (dedupe), `by_user`
 
 ### Key Files
 
 | File | Purpose |
 |---|---|
-| `convex/paddle.ts` | `paddleWebhook` httpAction (verifies Paddle-Signature, processes events) + `createCheckout` action (creates Paddle transaction, finds/creates customer) |
+| `convex/paddle.ts` | **Webhook:** `paddleWebhook` httpAction (verifies signature, dedupe check, event processing); **Checkout:** `createCheckout` action; **Self-service:** `changeSubscriptionPlan` (upgrade/downgrade with prorrateo), `previewSubscriptionChange` (read-only), `cancelSubscription` (schedule cancel), `reactivateSubscription` (undo cancel during grace), `updatePaymentMethod` (get transaction ID for Paddle.js overlay) |
+| `convex/crons.ts` | `applyDuePendingDowngrades` scheduled task (runs daily, applies downgrades past their effective date — backstop if renewal webhook misses) |
 | `convex/http.ts` | Registers `/api/webhooks/paddle` and existing routes |
-| `convex/users.ts` | `applySubscription` (internalMutation — the ONLY way to change planId), `getCurrentUserSubscription` query |
-| `convex/constants.ts` | `PlanId` includes `free`, `PLAN_QUOTAS.free`, `PLAN_FEATURES` (includes `thinking_mode` for Ultra), `PLAN_PRICES_USD` |
+| `convex/users.ts` | `applySubscription` (internalMutation — only way to change planId); `setPendingPlanChange`, `clearPendingPlanChange`, `applyDuePendingDowngrades` (manage downgrades); `isEventProcessed`, `recordSubscriptionEvent` (dedupe + audit); `getCurrentUserSubscription` query (returns subscription state + scheduled/pending changes) |
+| `convex/constants.ts` | `PlanId` includes `free`, `PLAN_QUOTAS`, `PLAN_FEATURES` (includes `thinking_mode` for Ultra), `PLAN_PRICES_USD`, `PLAN_RANK` (determines upgrade vs downgrade direction) |
 | `src/hooks/useCheckout.ts` | Calls `createCheckout` action, opens checkout URL via Tauri `open_url` command |
 | `src/components/PricingModal.tsx` | 3-tier pricing UI, subscribe buttons, subscription management (cancel/update payment via management_urls) |
 | `src/components/StatusBar.tsx` | Crown badge opens PricingModal |
@@ -443,9 +462,11 @@ Frontend (PricingModal) → useCheckout → Convex action: paddle.createCheckout
 ### Security
 
 - **`updateUserPlan` was converted to `internalMutation` (`applySubscription`)** — the ONLY way to change `planId` is through the Paddle webhook. Previously it was a public mutation (security vulnerability).
-- Webhook signature verification uses HMAC-SHA256 with `Paddle-Signature` header (`ts` + `h1` format)
+- **Webhook idempotence** — each Paddle `event_id` recorded in `subscriptionEvents` table; duplicate events return 200 without reprocessing (guards against replay, network retries)
+- **Webhook signature verification** uses HMAC-SHA256 with `Paddle-Signature` header (`ts` + `h1` format)
 - Timestamp tolerance: 5 minutes (anti-replay)
 - `createCheckout` action requires authenticated Clerk identity
+- `changeSubscriptionPlan`, `cancelSubscription`, `reactivateSubscription` require authenticated Clerk identity
 - `PADDLE_API_KEY` is server-side only (Convex env, never exposed to frontend)
 
 ### Paddle Sandbox IDs (dev)

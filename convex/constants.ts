@@ -26,3 +26,13 @@ export const PLAN_PRICES_USD: Record<Exclude<PlanId, "free">, number> = {
   pro: 19.99,
   ultra: 59.99,
 };
+
+// Orden de los planes. Decide si un cambio es upgrade (sube de rango → inmediato con
+// prorrateo) o downgrade (baja de rango → al final del ciclo). Espejo en el frontend
+// (src/constants/pricing.constants.ts).
+export const PLAN_RANK: Record<PlanId, number> = {
+  free: 0,
+  lite: 1,
+  pro: 2,
+  ultra: 3,
+};

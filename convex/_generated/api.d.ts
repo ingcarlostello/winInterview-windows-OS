@@ -10,6 +10,7 @@
 
 import type * as backend from "../backend.js";
 import type * as constants from "../constants.js";
+import type * as crons from "../crons.js";
 import type * as http from "../http.js";
 import type * as lib_userKey from "../lib/userKey.js";
 import type * as list_users from "../list_users.js";
@@ -28,6 +29,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   backend: typeof backend;
   constants: typeof constants;
+  crons: typeof crons;
   http: typeof http;
   "lib/userKey": typeof lib_userKey;
   list_users: typeof list_users;
