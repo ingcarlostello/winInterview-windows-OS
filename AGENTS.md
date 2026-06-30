@@ -276,9 +276,16 @@ A custom domain on a **private** Railway project needs **two** DNS records (Sett
 
 `src-tauri/src/audio.rs`, `src/hooks/useUpdater.ts`, NSIS/MSI + `createUpdaterArtifacts` in `tauri.conf.json`, `updates-server/` (Railway-hosted manifest + token-guarded `/publish`), and `.github/workflows/release.yml` (tag-triggered on `v*`) all exist; `cargo check` passes. **Pending:** generate the minisign updater key (`plugins.updater.pubkey` is a placeholder) and deploy `updates-server`.
 
-### Prod
+### Prod — LIVE (2026-06-30)
 
-Not set up — blocked on prod Convex (`unique-jaguar-230`) being provisioned (DNS + env vars + `auth.config.ts` issuer fix + `backfillUserKeys` with `APP_ENV=live`).
+The full prod stack is provisioned and validated at the infra level (`https://api.wininterview.xyz/health` → 200 over HTTPS, clean startup, no Convex errors).
+
+- **Railway prod env** `prod` (`74143a76-d840-43fd-ab91-8685329311f3`) in the same `winInterview-backend` project, service **`attractive-smile`** (`1d7d17dc-…`). Railway's "new environment" created a **blank** service (it did NOT fork `api`), so its source (`ingcarlostello/winInterview-windows-OS` @ `main`, root `backend`, Dockerfile, `/health`) and 8 env vars were set by hand. Custom domain **`https://api.wininterview.xyz`** (valid TLS via CNAME `api`→`3jyq052d.up.railway.app` + TXT `_railway-verify.api`, both at Hostinger). Prod vars: reused `DEEPGRAM/DEEPSEEK/MINIMAX` keys, `VITE_CONVEX_URL=https://unique-jaguar-230.convex.cloud`, `CONVEX_BACKEND_KEY` **matching Convex prod**, `APP_ENV=prod`, `ALLOWED_ORIGINS=http://tauri.localhost,tauri://localhost`, `ENFORCE_WS_ORIGIN=false`.
+- **Convex prod** (`unique-jaguar-230`): 10 env vars + functions deployed via the Convex CLI with a **prod deploy key** (the Convex MCP is read-only on prod). `APP_ENV=live`, `CLERK_ISSUER_URL=https://clerk.wininterview.xyz`, `CLERK_WEBHOOK_SIGNING_SECRET`, `CONVEX_BACKEND_KEY`, `PADDLE_API_KEY` (live), `PADDLE_API_URL=https://api.paddle.com`, `PADDLE_WEBHOOK_SECRET` (live), `PADDLE_PRICE_LITE/PRO/ULTRA` (live `pri_…`).
+- **Clerk prod**: instance live (domain `clerk.wininterview.xyz`, DNS + SSL set, JWT template `convex` present); webhook → `https://unique-jaguar-230.convex.site/api/webhooks/clerk`. **Paddle live**: product + 3 prices live; webhook → `https://unique-jaguar-230.convex.site/api/webhooks/paddle`.
+- **`auth.config.ts` issuer bug FIXED** — now env-driven (`process.env.CLERK_ISSUER_URL`); same fix in `webhooks.ts` `tokenIdentifier`. Committed in `main` (`13361a0`).
+- **railway-agent caveat (extended beyond domains):** its `commitStagedChangesTool` errors `root: Required` and it spawned a stray duplicate service — it stages but cannot commit. **Commit staged changes from the Railway dashboard** ("Apply N changes / Deploy").
+- **Pending:** flip `ENFORCE_WS_ORIGIN=true` after confirming the prod Tauri Origin in logs; run the real audio→LLM→vision E2E with a `wik_live_` key; installer + auto-updater still scaffolded-only.
 
 ## Global shortcuts
 
@@ -367,7 +374,7 @@ Both paths are **idempotent** — whichever runs first creates the user, the sec
 
 | File | Purpose |
 |---|---|
-| `convex/auth.config.ts` | Clerk JWT issuer configuration for Convex auth |
+| `convex/auth.config.ts` | Clerk JWT issuer for Convex auth — **env-driven** (`process.env.CLERK_ISSUER_URL ?? <dev fallback>`) so dev/prod each use their own issuer (2026-06-30) |
 | `convex/users.ts` | User CRUD: `storeUser`, `getCurrentUser`, `updateUserPlan`, `createUserFromClerk`, `updateUserFromClerk`, `deleteUserByClerkId` |
 | `convex/webhooks.ts` | Clerk webhook handler (verifies Svix signature) + backend quota decrement |
 | `convex/http.ts` | HTTP router for webhook and quota endpoints |
