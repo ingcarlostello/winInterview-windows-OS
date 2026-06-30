@@ -231,6 +231,15 @@ class AgentSession:
             logger.error(f"Failed to flush to Convex on stop: {e}")
         self.manager.disconnect(self.session_id)
 
+    def feed_audio(self, frame: bytes) -> None:
+        """Forward a client-captured PCM audio frame to the Deepgram agent.
+
+        Called by the WS handler for every binary message on the socket. Audio
+        is now captured in the desktop client (Tauri/Rust) instead of locally,
+        so the cloud backend just relays the frames into transcription.
+        """
+        self.audio.feed_audio(frame)
+
     async def handle_command(self, cmd: ParsedCommand) -> None:
         handler = {
             WsCommand.PAUSE: self._handle_pause,

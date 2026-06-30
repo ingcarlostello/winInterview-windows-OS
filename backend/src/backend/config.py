@@ -16,5 +16,21 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
 
+    # Deployment environment: "dev" | "live". Drives logging/diagnostics only.
+    app_env: str = "dev"
+    # Comma-separated list of allowed browser/WebView origins for CORS + the
+    # WebSocket Origin allowlist. Empty falls back to the local dev origin.
+    # Example (prod): "http://tauri.localhost,tauri://localhost"
+    allowed_origins: str = ""
+    # When True, WebSocket handshakes whose Origin header is present but not in
+    # the allowlist are rejected. Default False (log-only) so we can confirm the
+    # real Tauri WebView Origin from logs before turning enforcement on.
+    enforce_ws_origin: bool = False
+
+    @property
+    def allowed_origins_list(self) -> list[str]:
+        origins = [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
+        return origins or ["http://localhost:5173"]
+
 
 settings = Settings()

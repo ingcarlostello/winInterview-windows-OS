@@ -1,0 +1,17 @@
+# Never bake secrets or local cruft into the image — Railway injects env vars.
+.env
+.env.*
+*.env
+.venv
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.git
+.gitignore
+README.md
+*.md
+.vscode/

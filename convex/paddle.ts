@@ -1,5 +1,6 @@
 import { httpAction, action } from "./_generated/server";
 import type { ActionCtx } from "./_generated/server";
+import type { Doc } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import { api } from "./_generated/api";
 import { v } from "convex/values";
@@ -526,7 +527,16 @@ async function writeThroughFromSubscription(
 // (baja de rango) → programado al final del ciclo (pendingPlan* + do_not_bill).
 export const changeSubscriptionPlan = action({
   args: { planId: v.string() },
-  handler: async (ctx, args) => {
+  // Explicit return type breaks a TS circular-inference cycle (the handler
+  // references `api`/`internal`, which include this action itself).
+  handler: async (
+    ctx,
+    args
+  ): Promise<{
+    ok: true;
+    direction: "none" | "upgrade" | "downgrade";
+    effectiveAt?: string | null;
+  }> => {
     if (!PADDLE_API_KEY) throw new Error("PADDLE_API_KEY not configured");
     const validPlans = ["lite", "pro", "ultra"];
     if (!validPlans.includes(args.planId)) throw new Error(`Invalid plan: ${args.planId}`);
@@ -535,7 +545,9 @@ export const changeSubscriptionPlan = action({
     if (!identity) throw new Error("Unauthenticated");
     const clerkId = identity.subject;
 
-    const user = await ctx.runQuery(api.users.getCurrentUser, {});
+    // Explicit type breaks a TS circular-inference cycle (this action → api →
+    // back to paddle.ts) that otherwise makes the handler implicitly `any`.
+    const user: Doc<"users"> | null = await ctx.runQuery(api.users.getCurrentUser, {});
     if (!user) throw new Error("User not found");
     const subscriptionId = user.paddleSubscriptionId;
     if (!subscriptionId) {
@@ -612,7 +624,9 @@ export const previewSubscriptionChange = action({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Unauthenticated");
 
-    const user = await ctx.runQuery(api.users.getCurrentUser, {});
+    // Explicit type breaks a TS circular-inference cycle (this action → api →
+    // back to paddle.ts) that otherwise makes the handler implicitly `any`.
+    const user: Doc<"users"> | null = await ctx.runQuery(api.users.getCurrentUser, {});
     if (!user) throw new Error("User not found");
     const subscriptionId = user.paddleSubscriptionId;
     if (!subscriptionId) throw new Error("No active subscription.");
@@ -651,7 +665,9 @@ export const cancelSubscription = action({
     if (!identity) throw new Error("Unauthenticated");
     const clerkId = identity.subject;
 
-    const user = await ctx.runQuery(api.users.getCurrentUser, {});
+    // Explicit type breaks a TS circular-inference cycle (this action → api →
+    // back to paddle.ts) that otherwise makes the handler implicitly `any`.
+    const user: Doc<"users"> | null = await ctx.runQuery(api.users.getCurrentUser, {});
     if (!user) throw new Error("User not found");
     const subscriptionId = user.paddleSubscriptionId;
     if (!subscriptionId) throw new Error("No active subscription to cancel.");
@@ -676,7 +692,9 @@ export const reactivateSubscription = action({
     if (!identity) throw new Error("Unauthenticated");
     const clerkId = identity.subject;
 
-    const user = await ctx.runQuery(api.users.getCurrentUser, {});
+    // Explicit type breaks a TS circular-inference cycle (this action → api →
+    // back to paddle.ts) that otherwise makes the handler implicitly `any`.
+    const user: Doc<"users"> | null = await ctx.runQuery(api.users.getCurrentUser, {});
     if (!user) throw new Error("User not found");
     const subscriptionId = user.paddleSubscriptionId;
     if (!subscriptionId) {
@@ -702,7 +720,9 @@ export const updatePaymentMethod = action({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Unauthenticated");
 
-    const user = await ctx.runQuery(api.users.getCurrentUser, {});
+    // Explicit type breaks a TS circular-inference cycle (this action → api →
+    // back to paddle.ts) that otherwise makes the handler implicitly `any`.
+    const user: Doc<"users"> | null = await ctx.runQuery(api.users.getCurrentUser, {});
     if (!user) throw new Error("User not found");
     const subscriptionId = user.paddleSubscriptionId;
     if (!subscriptionId) throw new Error("No active subscription.");

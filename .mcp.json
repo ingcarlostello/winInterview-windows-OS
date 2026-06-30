@@ -21,7 +21,7 @@
       "type": "http",
       "url": "https://mcp.paddle.com/mcp",
       "headers": {
-        "Authorization": "Bearer pdl_live_apikey_01kvc4x0ez41jh7hq3rhkn8eae_66Nf2jYP2KaxtTyS2XycW9_AZk"
+        "Authorization": "Bearer ${PADDLE_LIVE_API_KEY}"
       }
     },
     "paddle-sandbox": {
@@ -30,6 +30,40 @@
       "headers": {
         "Authorization": "Bearer PADDLE_SANDBOX_API_KEY_HERE"
       }
+    },
+    "railway": {
+      "type": "http",
+      "url": "https://mcp.railway.com"
+    },
+    "hostinger-hosting": {
+      "type": "stdio",
+      "command": "npx.cmd",
+      "args": ["--package=hostinger-api-mcp@latest", "hostinger-hosting-mcp"],
+      "env": { "HOSTINGER_API_TOKEN": "${HOSTINGER_API_TOKEN}" }
+    },
+    "hostinger-domains": {
+      "type": "stdio",
+      "command": "npx.cmd",
+      "args": ["--package=hostinger-api-mcp@latest", "hostinger-domains-mcp"],
+      "env": { "HOSTINGER_API_TOKEN": "${HOSTINGER_API_TOKEN}" }
+    },
+    "hostinger-dns": {
+      "type": "stdio",
+      "command": "npx.cmd",
+      "args": ["--package=hostinger-api-mcp@latest", "hostinger-dns-mcp"],
+      "env": { "HOSTINGER_API_TOKEN": "${HOSTINGER_API_TOKEN}" }
+    },
+    "hostinger-billing": {
+      "type": "stdio",
+      "command": "npx.cmd",
+      "args": ["--package=hostinger-api-mcp@latest", "hostinger-billing-mcp"],
+      "env": { "HOSTINGER_API_TOKEN": "${HOSTINGER_API_TOKEN}" }
+    },
+    "hostinger-reach": {
+      "type": "stdio",
+      "command": "npx.cmd",
+      "args": ["--package=hostinger-api-mcp@latest", "hostinger-reach-mcp"],
+      "env": { "HOSTINGER_API_TOKEN": "${HOSTINGER_API_TOKEN}" }
     }
   }
 }

@@ -1,3 +1,5 @@
+mod audio;
+
 use std::io::Cursor;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -150,6 +152,8 @@ fn update_plan_permissions(
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
+        .manage(audio::AudioState::default())
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -158,6 +162,12 @@ pub fn run() {
                         .build(),
                 )?;
             }
+
+            // Auto-updater (desktop only). The frontend drives the check/install
+            // flow via @tauri-apps/plugin-updater; this just registers the plugin.
+            #[cfg(desktop)]
+            app.handle()
+                .plugin(tauri_plugin_updater::Builder::new().build())?;
 
             // ── Screen capture exclusion ───────────────────────────────
             // Content protection is OFF by default. It is enabled per-plan
@@ -248,6 +258,8 @@ pub fn run() {
             get_stealth_state,
             update_plan_permissions,
             open_url,
+            audio::start_audio,
+            audio::stop_audio,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

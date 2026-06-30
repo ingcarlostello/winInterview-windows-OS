@@ -11,6 +11,7 @@ from backend.llm.vision import VisionLLMService
 from backend.plan_gate import PlanGate
 from backend.tiers import Feature, PlanId
 from backend.ws.command_parser import create_default_parser
+from backend.ws.security import is_ws_origin_allowed
 from backend.ws.session import AgentSession
 from backend.ws_manager import ConnectionManager
 
@@ -30,6 +31,11 @@ async def websocket_endpoint(
         return
 
     session_id = str(uuid.uuid4())[:8]
+
+    if not is_ws_origin_allowed(websocket, session_id):
+        await websocket.close(code=1008, reason="Origin not allowed")
+        return
+
     initial_language = websocket.query_params.get("lang", "es")
     if initial_language not in ("es", "en"):
         initial_language = "es"
@@ -120,15 +126,31 @@ async def websocket_endpoint(
         return
         
     parser = create_default_parser()
-        
+
     try:
+        # The client streams two kinds of messages on this single socket:
+        #   - text  → control commands (pause/resume/set_language/...)
+        #   - bytes → raw 16 kHz mono int16 PCM audio frames (640 B / 20 ms),
+        #             captured client-side (Tauri/Rust) and forwarded to Deepgram.
+        # We use the low-level receive() (not receive_text()) so one socket can
+        # carry both; exactly one of "text"/"bytes" is set per message.
         while True:
-            msg = await websocket.receive_text()
-            cmd = parser.parse(msg)
-            if cmd:
-                await session.handle_command(cmd)
-            else:
-                logger.warning(f"Unknown command received in session {session_id}: {msg}")
+            message = await websocket.receive()
+            if message["type"] == "websocket.disconnect":
+                break
+
+            text = message.get("text")
+            if text is not None:
+                cmd = parser.parse(text)
+                if cmd:
+                    await session.handle_command(cmd)
+                else:
+                    logger.warning(f"Unknown command received in session {session_id}: {text}")
+                continue
+
+            data = message.get("bytes")
+            if data:
+                session.feed_audio(data)
     except (WebSocketDisconnect, ConnectionClosed, RuntimeError):
         logger.info(f"Session {session_id} disconnected normally")
     except Exception as e:
