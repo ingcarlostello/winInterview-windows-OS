@@ -6,7 +6,8 @@ authors = ["you"]
 license = ""
 repository = ""
 edition = "2021"
-rust-version = "1.77.2"
+# cpal's WASAPI backend pulls the windows crate, which needs Rust >= 1.82.
+rust-version = "1.82"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -24,6 +25,17 @@ log = "0.4"
 tauri = { version = "2.11.2", features = ["macos-private-api"] }
 tauri-plugin-log = "2"
 tauri-plugin-global-shortcut = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
 xcap = "0.3"
 base64 = "0.22"
 image = "0.25"
+# Audio capture (client-side; streamed to the cloud backend over the WS).
+cpal = "0.15"
+
+# Windows-only: WASAPI loopback for system-audio capture (Ultra). cpal does not
+# support loopback (RustAudio/cpal#476), so the `wasapi` crate handles it.
+# NOTE: pinned to 0.15 (the API audio.rs is written against). wasapi 0.23+ changed
+# initialize_client to take a StreamMode — adjust run_loopback() if you bump it.
+[target.'cfg(windows)'.dependencies]
+wasapi = "0.15"

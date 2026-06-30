@@ -1,0 +1,71 @@
+name: Release Windows Desktop
+
+# Build a signed Windows installer and publish it to the Railway "updates"
+# service so the Tauri auto-updater can pick it up.
+#
+# Trigger by pushing a version tag that MATCHES the app version in
+# package.json / src-tauri/tauri.conf.json, e.g.:  git tag v0.2.0 && git push --tags
+#
+# Required repo secrets:
+#   TAURI_SIGNING_PRIVATE_KEY           content of wininterview.key (minisign private key)
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD  password set at `tauri signer generate`
+#   UPDATES_PUBLISH_TOKEN               shared secret for the /publish endpoint
+# Required repo variable:
+#   UPDATES_URL                         e.g. https://updates.wininterview.xyz
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build-and-publish:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+
+      - name: Install JS deps
+        run: npm install
+
+      # Production build → bakes .env.production (wss://api.wininterview.xyz) and
+      # emits NSIS/MSI installers + .sig signatures (createUpdaterArtifacts).
+      - name: Build Tauri (production)
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: npm run tauri build
+
+      - name: Publish to updates service
+        shell: pwsh
+        env:
+          UPDATES_URL: ${{ vars.UPDATES_URL }}
+          UPDATES_PUBLISH_TOKEN: ${{ secrets.UPDATES_PUBLISH_TOKEN }}
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart("v")
+          $nsisDir = "src-tauri/target/release/bundle/nsis"
+          $setup = Get-ChildItem "$nsisDir/*-setup.exe" | Select-Object -First 1
+          $sig   = Get-ChildItem "$nsisDir/*-setup.exe.sig" | Select-Object -First 1
+          if (-not $setup -or -not $sig) { throw "NSIS setup.exe or .sig not found in $nsisDir" }
+          Write-Host "Publishing $($setup.Name) (v$version)"
+          curl.exe -f -X POST "$env:UPDATES_URL/publish" `
+            -H "Authorization: Bearer $env:UPDATES_PUBLISH_TOKEN" `
+            -F "version=$version" `
+            -F "notes=Release $version" `
+            -F "setup=@$($setup.FullName)" `
+            -F "signature=@$($sig.FullName)"

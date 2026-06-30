@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, Channel } from "@tauri-apps/api/core";
 import { useInterviewStore } from "../stores/interview";
 import type { Status } from "../stores/interview";
 import type { PlanInfo } from "../stores/slices/planSlice";
@@ -7,7 +7,11 @@ import type { Language } from "../stores/slices/settingsSlice";
 import { WS_MESSAGE_TYPE, WS_STATUS } from "../constants/ws";
 import { useAppAuth } from "./useAppAuth";
 
-const WS_BASE = "ws://localhost:8000/ws";
+// Backend base URL. Baked at build time from VITE_BACKEND_WS_URL (per Vite mode:
+// .env.development=ws://localhost:8000, .env.production=wss://api.wininterview.xyz).
+// Never hardcode — production installers must point at the Railway backend.
+const WS_BASE_URL = import.meta.env.VITE_BACKEND_WS_URL ?? "ws://localhost:8000";
+const WS_BASE = `${WS_BASE_URL}/ws`;
 
 // Reconnect policy: bounded exponential backoff instead of hammering every 3s.
 const MAX_RECONNECT_ATTEMPTS = 5;
@@ -16,6 +20,41 @@ const MAX_RECONNECT_DELAY = 30000;
 // Backend closes with 1008 (policy violation) for missing/invalid token or key.
 // Retrying that is pointless — surface the error and stop.
 const WS_FATAL_CLOSE_CODE = 1008;
+
+/** Decode a base64 audio frame (from the Rust capture Channel) to an ArrayBuffer. */
+function base64ToArrayBuffer(b64: string): ArrayBuffer {
+  const bin = atob(b64);
+  const buf = new ArrayBuffer(bin.length);
+  const view = new Uint8Array(buf);
+  for (let i = 0; i < bin.length; i++) view[i] = bin.charCodeAt(i);
+  return buf;
+}
+
+/**
+ * Start client-side audio capture in the Tauri shell and pipe each 16 kHz mono
+ * int16 PCM frame onto the open WebSocket as a binary message. Capture (mic /
+ * WASAPI loopback / mixed, per `source`) runs in Rust; frames arrive
+ * base64-encoded over a Tauri Channel and are re-sent as binary `/ws` frames to
+ * the cloud backend, which forwards them to Deepgram.
+ */
+async function startClientAudio(ws: WebSocket, source: string): Promise<void> {
+  const channel = new Channel<string>();
+  channel.onmessage = (b64) => {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(base64ToArrayBuffer(b64));
+    }
+  };
+  try {
+    await invoke("start_audio", { source, onFrame: channel });
+  } catch (err) {
+    console.error("[WS] start_audio failed:", err);
+  }
+}
+
+/** Stop the Rust capture session (idempotent). */
+function stopClientAudio(): void {
+  invoke("stop_audio").catch((err) => console.error("[WS] stop_audio failed:", err));
+}
 
 interface WSMessage {
   type: string;
@@ -96,6 +135,8 @@ export function useWebSocket() {
       setSessionStartTime(Date.now());
       reconnectAttemptsRef.current = 0;
       errorReceivedRef.current = false;
+      // Begin streaming locally-captured audio frames to the backend.
+      void startClientAudio(ws, audioSource);
     };
 
     ws.onmessage = (event) => {
@@ -213,6 +254,8 @@ export function useWebSocket() {
 
     ws.onclose = (event) => {
       setSessionStartTime(null);
+      // Stop capturing whenever the socket drops (reconnect re-starts on onopen).
+      stopClientAudio();
 
       // Cierre intencional (el usuario pulsó "Finalizar") o componente desmontado.
       if (intentionalCloseRef.current || !mountedRef.current) {

@@ -11,12 +11,14 @@ import { usePlanSync } from "./hooks/usePlanSync";
 import { useScreenCapture } from "./hooks/useScreenCapture";
 import { useTranscriptionCountdown } from "./hooks/useTranscriptionCountdown";
 import { usePendingUpgrade } from "./hooks/usePendingUpgrade";
+import { useUpdater } from "./hooks/useUpdater";
 
 export default function App() {
   const { send, disconnect, connect, setPrompt, restoreDefaultPrompt, changeLanguage } = useWebSocket();
   const { t } = useTranslation();
   const userKey = useInterviewStore((s) => s.userKey);
   const clearUserKey = useInterviewStore((s) => s.clearUserKey);
+  useUpdater();
   usePlanSync();
   const { captureScreen } = useScreenCapture();
   useTranscriptionCountdown();

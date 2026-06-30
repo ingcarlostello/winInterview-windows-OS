@@ -11,6 +11,7 @@ from backend.dependencies import get_vision_service
 from backend.plan_gate import FeatureBlockedError, PlanGate, QuotaExceededError
 from backend.tiers import Feature, PlanId, Quota
 from backend.ws.message_types import WsMessageType
+from backend.ws.security import is_ws_origin_allowed
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,10 @@ async def analyze_screens_ws(websocket: WebSocket):
     """WebSocket para análisis de múltiples capturas de pantalla."""
     await websocket.accept()
     session_id = str(uuid.uuid4())
+
+    if not is_ws_origin_allowed(websocket, session_id):
+        await websocket.close(code=1008, reason="Origin not allowed")
+        return
 
     token = websocket.query_params.get("token")
     key = websocket.query_params.get("key")

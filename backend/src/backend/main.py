@@ -7,6 +7,7 @@ load_dotenv()
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from backend.config import settings
 from backend.dependencies import get_connection_manager
 from backend.routers import screens
 from backend.ws.handler import websocket_endpoint
@@ -20,10 +21,15 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Interview Responder Backend")
 
+# Explicit origin allowlist (no wildcard). The desktop app is a Tauri WebView
+# whose origin is e.g. "http://tauri.localhost" (Windows) / "tauri://localhost"
+# (macOS); dev uses "http://localhost:5173". Configure via ALLOWED_ORIGINS.
+# allow_credentials is False because the desktop authenticates with an opaque
+# key in the WS query string, not cookies (and "*" + credentials is invalid).
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=settings.allowed_origins_list,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

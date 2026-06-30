@@ -13,7 +13,9 @@ import { useCallback, useRef, useState } from "react";
 
 const MAX_CAPTURES_ULTRA = 4;
 const MAX_CAPTURES_LITE = 1;
-const WS_ANALYZE_URL = "ws://localhost:8000/api/ws/analyze-screens";
+// Backend base URL baked at build time (see useWebSocket.ts / VITE_BACKEND_WS_URL).
+const WS_BASE_URL = import.meta.env.VITE_BACKEND_WS_URL ?? "ws://localhost:8000";
+const WS_ANALYZE_URL = `${WS_BASE_URL}/api/ws/analyze-screens`;
 
 export default function ScreenPanel() {
   const screenImages = useInterviewStore((s) => s.screenImages);
