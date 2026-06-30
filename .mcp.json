@@ -34,6 +34,36 @@
     "railway": {
       "type": "http",
       "url": "https://mcp.railway.com"
+    },
+    "hostinger-hosting": {
+      "type": "stdio",
+      "command": "npx.cmd",
+      "args": ["--package=hostinger-api-mcp@latest", "hostinger-hosting-mcp"],
+      "env": { "HOSTINGER_API_TOKEN": "YZaus8pxDPZscyvSGTVEAu1syBcngi3Gj4RjaOz70df0f67f" }
+    },
+    "hostinger-domains": {
+      "type": "stdio",
+      "command": "npx.cmd",
+      "args": ["--package=hostinger-api-mcp@latest", "hostinger-domains-mcp"],
+      "env": { "HOSTINGER_API_TOKEN": "YZaus8pxDPZscyvSGTVEAu1syBcngi3Gj4RjaOz70df0f67f" }
+    },
+    "hostinger-dns": {
+      "type": "stdio",
+      "command": "npx.cmd",
+      "args": ["--package=hostinger-api-mcp@latest", "hostinger-dns-mcp"],
+      "env": { "HOSTINGER_API_TOKEN": "YZaus8pxDPZscyvSGTVEAu1syBcngi3Gj4RjaOz70df0f67f" }
+    },
+    "hostinger-billing": {
+      "type": "stdio",
+      "command": "npx.cmd",
+      "args": ["--package=hostinger-api-mcp@latest", "hostinger-billing-mcp"],
+      "env": { "HOSTINGER_API_TOKEN": "YZaus8pxDPZscyvSGTVEAu1syBcngi3Gj4RjaOz70df0f67f" }
+    },
+    "hostinger-reach": {
+      "type": "stdio",
+      "command": "npx.cmd",
+      "args": ["--package=hostinger-api-mcp@latest", "hostinger-reach-mcp"],
+      "env": { "HOSTINGER_API_TOKEN": "YZaus8pxDPZscyvSGTVEAu1syBcngi3Gj4RjaOz70df0f67f" }
     }
   }
 }
