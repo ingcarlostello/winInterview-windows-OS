@@ -5,9 +5,9 @@
 - **Tauri v2 desktop app** (React + TypeScript frontend, Rust shell, Python orchestration backend)
 - **Frontend**: `src/` — React 19, Tailwind CSS v4, Zustand, Vite, react-markdown, react-syntax-highlighter
 - **Desktop shell**: `src-tauri/` — Rust (window management commands, global shortcuts, ghost mode, content protection)
-- **Orchestration backend**: `backend/` — FastAPI + WebSockets, managed via Poetry. Uses Deepgram SDK (nova-3 for ASR), DeepSeek API (deepseek-v4-flash for LLM), MiniMax (MiniMax-M3 for vision analysis)
+- **Orchestration backend**: `backend/` — FastAPI + WebSockets, managed via Poetry. Uses Deepgram SDK (nova-3 for ASR), DeepSeek API (deepseek-v4-flash for LLM), MiniMax (MiniMax-M3 for vision analysis). **Deployed to Railway (cloud), 2026-06-30** — see the *Cloud Deployment (Railway)* section. Runs headless: it no longer captures audio, it only relays client-streamed PCM frames to Deepgram
 - The app runs as a transparent, always-on-top overlay (`730×730` collapsed, `1600×730` expanded, frameless) designed to float over Zoom/Meet
-- **Flow**: Microphone → PyAudio (16kHz PCM) → streamed to Deepgram Agent (ASR only) → transcription triggers LLM streaming via DeepSeek → Response chunks via WebSocket → Frontend renders Markdown + code blocks
+- **Flow** (audio capture moved Python → Rust client, 2026-06-30): Rust captures mic (`cpal`) + WASAPI loopback (`wasapi` crate) in `src-tauri/src/audio.rs` → 16kHz mono i16 PCM → base64 over a Tauri `Channel` → JS re-sends as **binary WebSocket frames** → backend `/ws` relays each frame to Deepgram Agent (ASR only) → transcription triggers LLM streaming via DeepSeek → Response chunks via WebSocket → Frontend renders Markdown + code blocks
 - **Screen capture**: Tauri command `capture_screen` in `src-tauri/src/lib.rs` uses the `xcap` crate to capture the first monitor, resizes to a max width of 1280 px, encodes as JPEG (quality 75), and returns base64 → stored in Zustand (`screenImages`, max 4). Each successful capture decrements `screen_captures` quota in Convex via `useCaptureQuota`. VisionLLMService (MiniMax-M3) analyzes captures via separate WebSocket
 - **Tier system**: Lite/Pro/Ultra plans gate features and quotas. **Convex is the source of truth** for `planId` and quota remaining; the Python backend reads them on every WebSocket connection via `ConvexClient` and enforces limits with `PlanGate`. Zustand (`planSlice`) caches the live state and receives updates from both the backend WebSocket (`PLAN_INFO`/`QUOTA_UPDATE`) and a reactive Convex query (`users.getCurrentUserPlanInfo`). Rust is a shortcut guardian (`update_plan_permissions`). Quotas reset per calendar month. **Paddle** manages subscriptions via webhooks → Convex updates `planId`; users without a subscription are on the `free` tier (3 min transcription trial, 0 captures/analyses).
 
@@ -163,9 +163,7 @@ Actions: `setStatus`, `setLanguage`, `setTranscription`, `addResponseChunk`, `cl
 | `deepgram-sdk` | Deepgram Agent SDK (nova-3 for ASR only, linear16 encoding, 16kHz, smart_format, endpointing=1500ms) |
 | `openai` | OpenAI-compatible client for DeepSeek API and MiniMax |
 | `fastapi` | Web framework |
-| `sounddevice` | Audio capture from microphone (16kHz, 16-bit mono) |
-| `soundcard` | System audio loopback capture via WASAPI (Windows only, Ultra plan feature) |
-| `numpy` | Audio frame processing, downmixing stereo to mono |
+| ~~`sounddevice` / `soundcard` / `numpy`~~ | **REMOVED 2026-06-30.** Audio is now captured client-side in Rust (`src-tauri/src/audio.rs`) and streamed to the backend as binary PCM frames over the WS; the backend only relays to Deepgram. These libs would fail to import on Railway's headless Linux anyway |
 | `pydantic-settings` | Configuration management |
 | `uvicorn[standard]` | ASGI server |
 | `websockets` | WebSocket exception handling |
@@ -178,7 +176,7 @@ Actions: `setStatus`, `setLanguage`, `setTranscription`, `addResponseChunk`, `cl
 - `GET /health` — Returns status and active connection count
 - `WebSocket /ws` — Main endpoint with per-connection lifecycle (delegated to `AgentSession`)
 - REST routers: `prompts` (CRUD for custom prompts), `screens` (screen capture + analysis)
-- CORS middleware (allow all origins)
+- CORS middleware — **env-driven allowlist** from `ALLOWED_ORIGINS` with `allow_credentials=False` (updated 2026-06-30; was "allow all origins", which is spec-invalid with credentials). WS handshakes additionally checked via `ws/security.py` (`enforce_ws_origin`)
 
 **Key patterns**:
 - Deepgram Agent handles VAD and ASR only (no LLM)
@@ -202,20 +200,21 @@ Actions: `setStatus`, `setLanguage`, `setTranscription`, `addResponseChunk`, `cl
 
 | Module | Purpose |
 |---|---|
-| `config.py` | Pydantic settings: `deepgram_api_key`, `deepseek_api_key`, `minimax_api_key`, `host`, `port` |
+| `config.py` | Pydantic settings: `deepgram_api_key`, `deepseek_api_key`, `minimax_api_key`, `clerk_jwks_url`, `host`, `port`; plus (2026-06-30) `app_env`, `allowed_origins` (comma-separated CORS + WS-Origin allowlist, exposed via the `allowed_origins_list` property), `enforce_ws_origin` |
 | `tiers.py` | `PlanId` (FREE/LITE/PRO/ULTRA), `Feature` (CUSTOM_PROMPTS, SIMULTANEOUS_CAPTURES, SIMULTANEOUS_ANALYSIS, KEYBOARD_SHORTCUTS, INVISIBLE_MODE, GHOST_MODE, THINKING_MODE, SYSTEM_AUDIO_CAPTURE, SIMULTANEOUS_AUDIO), `Quota` (TRANSCRIPTION_SECONDS, SCREEN_CAPTURES, SCREEN_ANALYSES) enums. `PlanDefinition` dataclass. `PLANS` dict with per-plan features/quotas. Helper functions: `get_plan()`, `has_feature()`, `get_quota_limit()`. **Ultra-only**: `SYSTEM_AUDIO_CAPTURE` (loopback WASAPI) and `SIMULTANEOUS_AUDIO` (mic+loopback mixed) |
 | `convex_client.py` | Authenticated HTTP client for the Python backend to call Convex HTTP actions (`/api/users/get`, `/api/quotas/decrement`) |
 | `plan_gate.py` | `FeatureBlockedError`, `QuotaExceededError` exceptions. `PlanGate` class: initializes usage from Convex remaining, enforces feature/quotas in-memory, and flushes consumption to Convex via `ConvexClient` |
 | `context.py` | `ConversationHistory` — message list management (system prompt + user/assistant messages, max 20, auto-trim). Used by `AgentSession` |
 | `dependencies.py` | DI singletons: `get_connection_manager()`, `get_llm_service()` (DeepSeekLLMService), `get_vision_service()` (VisionLLMService) |
 | `ws_manager.py` | `ConnectionManager` with typed sends using `WsMessageType`/`WsStatus` enums: `send_status`, `send_transcription`, `send_response_chunk`, `send_error`, `send_screen_chunk`, `send_screen_image` |
-| `ws/handler.py` | `websocket_endpoint` FastAPI handler. Verifies Clerk JWT from `?token=` (with 10s leeway tolerance for clock skew), fetches plan/quotas from Convex via `ConvexClient`, creates `PlanGate`, and injects into `AgentSession`. Language/prompt/`audio_source` come from query params. Silently enforces `audio_source="mic"` if plan lacks `SYSTEM_AUDIO_CAPTURE`/`SIMULTANEOUS_AUDIO` features (same pattern as `thinking_mode`). Uses `CommandParser` via `create_default_parser()` |
-| `ws/session.py` | `AgentSession` class (~240 lines). Pure coordinator: wires `AudioStreamingService` ↔ `ConversationHistory` ↔ LLM/Vision ↔ WebSocket. Accepts optional `audio_service`, `history`, `audio_source` params for DI/testing. `DialogCoordinator` inner class handles business logic with `PlanGate` integration. `_send_plan_info()` on connect and after each flush. Feature gates on set/clear_prompt. Logs audio source choice on session start |
+| `ws/handler.py` | `websocket_endpoint` FastAPI handler. Verifies Clerk JWT from `?token=` (with 10s leeway tolerance for clock skew), fetches plan/quotas from Convex via `ConvexClient`, creates `PlanGate`, and injects into `AgentSession`. Language/prompt/`audio_source` come from query params. Silently enforces `audio_source="mic"` if plan lacks `SYSTEM_AUDIO_CAPTURE`/`SIMULTANEOUS_AUDIO` features (same pattern as `thinking_mode`). Uses `CommandParser` via `create_default_parser()`. **2026-06-30:** the receive loop now uses `await websocket.receive()` — **text** messages → `CommandParser`; **binary** messages → `session.feed_audio(data)` (client-streamed audio → Deepgram). Calls `is_ws_origin_allowed()` (from `ws/security.py`) after `accept()` to check the `Origin` header against `allowed_origins` |
+| `ws/security.py` | **New 2026-06-30.** `is_ws_origin_allowed(websocket, session_id)` — logs the WS `Origin` header and, when `settings.enforce_ws_origin` is `true`, rejects connections whose `Origin` is present and not in `allowed_origins_list` (no-Origin native clients pass). Defense-in-depth on top of the opaque-key auth; used by both `ws/handler.py` and `routers/screens.py` |
+| `ws/session.py` | `AgentSession` class (~240 lines). Pure coordinator: wires `AudioStreamingService` ↔ `ConversationHistory` ↔ LLM/Vision ↔ WebSocket. Accepts optional `audio_service`, `history`, `audio_source` params for DI/testing. `DialogCoordinator` inner class handles business logic with `PlanGate` integration. `_send_plan_info()` on connect and after each flush. Feature gates on set/clear_prompt. Logs audio source choice on session start. **2026-06-30:** exposes `feed_audio(data)` which delegates client-streamed audio frames to `AudioStreamingService.feed_audio()` |
 | `ws/commands.py` | `WsCommand` enum: PAUSE, RESUME, CLEAR, SET_LANGUAGE, SET_PROMPT, CLEAR_PROMPT, CAPTURE_SCREEN. `ParsedCommand` dataclass |
 | `ws/command_parser.py` | `CommandParser` with registry-based handler pattern. `ExactMatchHandler` (no-payload commands), `PrefixMatchHandler` (colon-delimited payload). `create_default_parser()` factory |
 | `ws/message_types.py` | `WsMessageType` enum (STATUS, TRANSCRIPTION, CHUNK, ERROR, SCREEN_CHUNK, SCREEN_IMAGE, PLAN_INFO, QUOTA_UPDATE) and `WsStatus` enum (CONNECTED, LISTENING, THINKING, RESPONDING, PAUSED, RECONNECTING, CLEARED, CAPTURING, ANALYZING, COMPLETED, PROMPT_SAVED, PROMPT_CLEARED, QUOTA_EXCEEDED, FEATURE_BLOCKED) |
-| `audio/capture.py` | Three audio capture classes: `AudioCapture` (microphone via sounddevice, 16kHz, 16-bit, mono, 20ms frames, async loop); `SystemAudioCapture` (Windows WASAPI loopback via soundcard, Ultra-only, daemon thread with COM initialization); `MixedAudioCapture` (parallel mic + loopback with int32 anti-clip mixing). All share `set_handlers()` / `start()` / `stop()` / `close()` interface |
-| `audio/service.py` | `AudioStreamingService` — owns audio capture (`AudioCapture`, `SystemAudioCapture`, or `MixedAudioCapture`) + Deepgram Agent lifecycle. Accepts `audio_source: "mic" | "system" | "both"` parameter. Callback-driven (`on_transcription`, `on_user_started_speaking`, `on_agent_error`). Handles keepalive loop, pause/resume, language restart |
+| `audio/capture.py` | **Gutted to a docstring stub 2026-06-30** — the old `AudioCapture`/`SystemAudioCapture`/`MixedAudioCapture` classes (sounddevice/soundcard) were removed. Capture now lives client-side in Rust (`src-tauri/src/audio.rs`): cpal mic + `wasapi` loopback + averaging resampler + int32 anti-clip mix |
+| `audio/service.py` | `AudioStreamingService` — **no longer owns capture** (2026-06-30); manages only the Deepgram Agent lifecycle. `feed_audio(frame: bytes)` relays a client-captured 16 kHz mono i16 PCM frame to Deepgram (respecting pause/closed state). Callback-driven (`on_transcription`, `on_user_started_speaking`, `on_agent_error`). Handles keepalive loop, pause/resume, language restart |
 | `agent/deepgram.py` | `DeepgramAgent` class. Wraps Deepgram SDK v7+ Agent API. `nova-3` model. `send_media()` for PCM frames. `keep_alive()` sends keepalive + dummy audio |
 | `llm/prompt.py` | Default system prompts for ES/EN. Custom prompt CRUD via `prompts.json` file |
 | `llm/protocol.py` | `LLMService` Protocol with `stream_response()` async iterator interface |
@@ -252,6 +251,35 @@ All messages follow: `{"type": "...", "data": {...}}` (via `ConnectionManager`) 
 - The `.gitignore` ignores `.env`, `.env.local`, and `backend/.env`
 - **Active Convex deployment** (Windows dev): `dev:qualified-cuttlefish-550` → `https://qualified-cuttlefish-550.convex.cloud`
 
+## Cloud Deployment (Railway) — shipped 2026-06-30
+
+The Python backend is deployed to **Railway**; the desktop connects over WSS. **Zero secrets ship in the client** — all real API keys are Railway service vars. Full operational runbook in `DEPLOYMENT.md`.
+
+### Backend service
+
+- **Project** `winInterview-backend` (`1f45c442-eeb0-4cc3-ba33-2e94605419f1`), env `production` (`fca07bc7-…`), service **`api`** (`0455986b-…`).
+- Builds from **`backend/Dockerfile`** (`python:3.14-slim` + Poetry, installs from `poetry.lock`) with **Root Directory = `backend`** and `backend/railway.json` (builder=DOCKERFILE, `healthcheckPath: /health`, restart ON_FAILURE). `backend/.dockerignore` excludes `.env*`/`.venv`/`.git`. CMD binds `0.0.0.0:${PORT}` (Railway injects `PORT`).
+- Tracks the **`main`** branch — pushes to `main` auto-deploy. (Originally `feat/deploy-backend-to-railway`, merged via PR #9.)
+- **URLs:** `https://api-production-d6a6.up.railway.app` + custom domain **`https://api-dev.wininterview.xyz`** (valid TLS).
+- **Service env vars:** `DEEPGRAM_API_KEY`, `DEEPSEEK_API_KEY`, `MINIMAX_API_KEY`, `CONVEX_BACKEND_KEY`, `VITE_CONVEX_URL` (dev Convex), `APP_ENV=dev`, `ALLOWED_ORIGINS=http://tauri.localhost,tauri://localhost,http://localhost:5173`, `ENFORCE_WS_ORIGIN=false` (log-only; flip to `true` after confirming the real Tauri Origin — observed dev = `http://localhost:5173`, prod build = `http://tauri.localhost`).
+- **Validated end-to-end** against Convex dev: key auth → plan load → Deepgram transcription → DeepSeek + MiniMax vision, all `200`.
+
+### Build-time backend URL (never hardcoded)
+
+The desktop reads `VITE_BACKEND_WS_URL` per Vite mode (`useWebSocket.ts`, `ScreenPanel.tsx`): `.env.development`→`ws://localhost:8000`, `.env.staging`→`wss://api-dev.wininterview.xyz`, `.env.production`→`wss://api.wininterview.xyz` (these three are **committed — public values only**). `npm run tauri build` bakes `.env.production`; build in `staging` mode for a dev-backend installer. A gitignored `.env.development.local` can override the dev URL to test `npm run tauri dev` against the cloud.
+
+### Custom domain on Railway (private project gotcha)
+
+A custom domain on a **private** Railway project needs **two** DNS records (Settings → Networking → Custom Domain shows both): a **CNAME** (`api-dev` → a `*.up.railway.app` target) **and** a **`_railway-verify.<sub>` TXT** ownership record. **Missing the TXT = the TLS cert never issues** (this bit us for ~30 min). DNS for `wininterview.xyz` is at **Hostinger** (manage via the Hostinger DNS MCP, or the API directly with `${HOSTINGER_API_TOKEN}`). Do **not** use `railway-agent` for domains — it omits the TXT and churns the domain list; use the dashboard.
+
+### Installer + auto-updater (scaffolded, NOT yet operational)
+
+`src-tauri/src/audio.rs`, `src/hooks/useUpdater.ts`, NSIS/MSI + `createUpdaterArtifacts` in `tauri.conf.json`, `updates-server/` (Railway-hosted manifest + token-guarded `/publish`), and `.github/workflows/release.yml` (tag-triggered on `v*`) all exist; `cargo check` passes. **Pending:** generate the minisign updater key (`plugins.updater.pubkey` is a placeholder) and deploy `updates-server`.
+
+### Prod
+
+Not set up — blocked on prod Convex (`unique-jaguar-230`) being provisioned (DNS + env vars + `auth.config.ts` issuer fix + `backfillUserKeys` with `APP_ENV=live`).
+
 ## Global shortcuts
 
 | Shortcut | Action |
@@ -267,13 +295,14 @@ Defined in `src-tauri/src/lib.rs`.
 ## Rust/Tauri notes
 
 - Rust changes in `src-tauri/` require a rebuild of the Tauri binary — the Vite HMR does not cover them
-- The `src-tauri/capabilities/default.json` grants `core:default`, `core:window:allow-start-dragging`, `core:window:allow-set-content-protected`, `core:window:allow-set-ignore-cursor-events`, `core:window:allow-set-size`, and `global-shortcut:default` permissions
+- The `src-tauri/capabilities/default.json` grants `core:default`, `core:window:allow-start-dragging`, `core:window:allow-set-content-protected`, `core:window:allow-set-ignore-cursor-events`, `core:window:allow-set-size`, `core:window:allow-close`, `core:window:allow-minimize`, `global-shortcut:default`, and (2026-06-30) `updater:default` + `process:allow-restart` permissions
 - `main.rs` sets `windows_subsystem = "windows"` in release mode — console output is suppressed on Windows
 - **`macos-private-api`** feature is enabled in `Cargo.toml` — required for transparent windows on macOS
 - Window config in `tauri.conf.json`: 730x730 (collapsed), resizable to 1600x730 (expanded), frameless, transparent, always-on-top, centered, visible, CSP disabled
 - Static atomic flags: `GHOST_MODE` (default false), `CONTENT_PROTECTED` (default true), `SHORTCUTS_ENABLED` (default false), `INVISIBLE_MODE_ENABLED` (default false), `GHOST_MODE_ENABLED` (default false)
 - Window `alwaysOnTop` state is managed via `window.is_always_on_top()` (default true)
-- Commands: `toggle_always_on_top`, `toggle_content_protected`, `set_window_expanded`, `get_stealth_state`, `update_plan_permissions`
+- Commands: `toggle_always_on_top`, `toggle_content_protected`, `set_window_expanded`, `get_stealth_state`, `update_plan_permissions`, `capture_screen`, `open_url`, and (2026-06-30) `start_audio` / `stop_audio` (client-side audio capture)
+- **Audio capture (`src-tauri/src/audio.rs`, new 2026-06-30):** cpal mic + `wasapi` loopback (Windows) + averaging resampler + int32 anti-clip mix → 16 kHz mono i16 PCM (640-byte / 20 ms frames) → base64 over a Tauri `Channel` → JS sends as binary WS frames. New Cargo deps: `cpal`, `wasapi` (Windows-only), `tauri-plugin-updater`, `tauri-plugin-process`; `rust-version` bumped 1.77 → 1.82. **Installer/updater:** `tauri.conf.json` bundles NSIS + MSI with `createUpdaterArtifacts: true` (nsis `installMode: "currentUser"`) and a signed auto-updater (`plugins.updater` + `src/hooks/useUpdater.ts`). `cargo check` passes (toolchain 1.96, `wasapi` resolved 0.15)
 
 ## Authentication (Clerk + Convex)
 
@@ -486,9 +515,11 @@ Claude Code can access these external services via MCP for development:
 | **Convex** | Local | Backend database, HTTP actions, mutations, queries | Project auth (via `convex env`) |
 | **Clerk** | Remote | User identity, JWT verification, user management | Built-in |
 | **Paddle Sandbox** | Remote | Testing subscriptions, billing flows | `PADDLE_SANDBOX_API_KEY` env var |
-| **Paddle Live** | Remote | Production subscriptions (read-only in dev) | `PADDLE_LIVE_API_KEY` env var |
+| **Paddle Live** | Remote | Production subscriptions (read-only in dev) | `${PADDLE_LIVE_API_KEY}` env var |
+| **Railway** | Remote | Deploy/manage/debug the cloud backend (projects, services, deploys, logs, `railway-agent`) | Account auth |
+| **Hostinger** (split: `hostinger-dns`/`-domains`/`-hosting`/`-billing`/`-reach`) | Local (stdio) | Manage `wininterview.xyz` DNS + domains/hosting/billing | `${HOSTINGER_API_TOKEN}` env var |
 
-**Configuration**: `.claude/settings.json` — MCPs are auto-loaded when Claude Code starts.
+**Configuration**: `.mcp.json` (project root, **committed**) — MCPs auto-load when Claude Code starts. **Secrets in `.mcp.json` are `${VAR}` env-var references ONLY** (`${PADDLE_LIVE_API_KEY}`, `${HOSTINGER_API_TOKEN}`) — never literals, since the file is public. A live Paddle key and a Hostinger token were each committed literally once (both since rotated). Changing the env var requires a Claude Code restart to take effect. **Railway `railway-agent` caveat:** unreliable for custom-domain ops (omits the verification TXT, churns the domain list) — add domains via the Railway dashboard instead.
 
 ### Using MCP in Claude Code
 
@@ -499,6 +530,8 @@ Claude Code can access these external services via MCP for development:
 ---
 
 ## System Audio Capture (Windows, Ultra-only)
+
+> **⚠️ MOVED TO RUST (2026-06-30).** The detail below describes the *original Python* capture (`sounddevice`/`soundcard`/`numpy`). Audio capture now runs **client-side in Rust** (`src-tauri/src/audio.rs`: cpal mic + `wasapi` loopback + averaging resampler + int32 anti-clip mix) and is streamed to the backend as binary PCM frames over the WS — the backend no longer captures audio (so it can run headless on Railway). The **three modes, plan gating, and frontend UX below still apply**; only the capture *location* changed (Python → Rust client). Kept for design/historical context.
 
 ### Overview
 
@@ -566,7 +599,9 @@ Windows has a built-in alias that redirects `python` to the Microsoft Store app,
 2. Poetry scripts are at: `C:\Users\react\AppData\Local\Programs\Python\Python314\Scripts`
 3. Before running Poetry or Python commands, the script files (`start-backend.ps1`, `start-frontend.ps1`) explicitly reorder PATH to prioritize Python 3.14 and remove the WindowsApps alias
 
-### Audio Capture: sounddevice (microphone) + soundcard (system loopback)
+### Audio Capture: ~~sounddevice + soundcard~~ → now Rust (client-side)
+
+> **Updated 2026-06-30:** audio capture moved out of Python into the **Rust client** (`src-tauri/src/audio.rs`, cpal + `wasapi`). The Python deps below (`sounddevice`/`soundcard`/`numpy`) were **removed** from `pyproject.toml`. The notes below are historical (they describe the old Python pipeline).
 
 **Microphone** (`sounddevice >=0.4.6`):
 - Pure Python with precompiled wheels (no build step)
@@ -611,16 +646,18 @@ Usage: Open two PowerShell windows in the project root and run:
 
 ### Known Limitations
 
-- **Rust toolchain not yet installed** — Needed for `npm run tauri build`. For dev, `npm run tauri dev` uses the precompiled Tauri CLI.
-- **Backend API keys pending** — `backend/.env` has been created with `CLERK_SECRET_KEY`; `DEEPGRAM_API_KEY`, `DEEPSEEK_API_KEY`, `MINIMAX_API_KEY`, and `CONVEX_BACKEND_KEY` still need real values.
-- **Paddle env vars** — `PADDLE_SANDBOX_API_KEY` / `PADDLE_LIVE_API_KEY` not yet set in system env (referenced in `.claude/settings.json` MCP headers).
+- ~~Rust toolchain not yet installed~~ — **Installed (2026-06-30):** Rust/cargo 1.96; `cargo check` passes, so `npm run tauri build` is now possible.
+- ~~Backend API keys pending~~ — **Set (2026-06-30):** `backend/.env` has real Deepgram/DeepSeek/MiniMax/Convex keys locally; the same keys live as Railway service vars for the cloud backend.
+- **Updater signing key + `updates-server` still pending** — `tauri.conf.json` `plugins.updater.pubkey` is a placeholder; the updates host is not deployed (see *Cloud Deployment*).
+- **Local DNS gotcha (this dev machine):** the router-only resolver intermittently fails `getaddrinfo` (broke `curl`/`cargo`/MCP). Fix: set the adapter DNS to `8.8.8.8`/`1.1.1.1` (needs admin).
 
 ### Env Files Status (Windows dev machine)
 
 | File | Status | Notes |
 |---|---|---|
-| `.env.local` | ✅ Created | `VITE_CLERK_PUBLISHABLE_KEY`, `VITE_CONVEX_URL`, `CONVEX_DEPLOYMENT` set |
-| `backend/.env` | ⚠️ Partial | `CLERK_SECRET_KEY` set; Deepgram/DeepSeek/MiniMax/Convex keys still placeholder |
+| `.env.local` | ✅ Created | `VITE_CLERK_PUBLISHABLE_KEY`, `VITE_CONVEX_URL`, `CONVEX_DEPLOYMENT` set (gitignored) |
+| `backend/.env` | ✅ Complete | All keys set (Deepgram/DeepSeek/MiniMax/Convex/Clerk), gitignored. Same keys are Railway service vars in the cloud |
+| `.env.{development,staging,production}` | ✅ Committed | Public build config only — `VITE_BACKEND_WS_URL` per Vite mode + public Convex/Paddle tokens |
 
 ## Other files
 
