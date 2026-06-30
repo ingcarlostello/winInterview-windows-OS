@@ -68,13 +68,17 @@ A user's plan (`free` / `lite` / `pro` / `ultra`) gates features and quotas, and
 ## Real-time session data flow
 
 ```
-Mic / system-audio (Python) → Deepgram nova-3 (ASR only, VAD) → transcription
+Audio (CLIENT-SIDE Rust: cpal mic + WASAPI loopback, src-tauri/src/audio.rs) → 16 kHz
+  mono i16 PCM → base64 over a Tauri Channel → JS re-sends as BINARY WS frames → backend
+  /ws relays each frame to Deepgram nova-3 (ASR only, VAD) → transcription
   → DeepSeek (deepseek-v4-flash) streams response → WS chunks → React renders Markdown
 Screen capture: Tauri `capture_screen` (xcap crate, src-tauri) → base64 in Zustand
   → separate WS `/api/ws/analyze-screens` → MiniMax (MiniMax-M3) vision → streamed solution
 ```
 
-The Python backend is split by responsibility: `audio/` (three capture modes — mic / WASAPI loopback / mixed, Ultra-gated), `llm/`, `agent/` (Deepgram wrapper), `ws/` (session coordinator + registry-based command parser), `plan_gate.py`, `convex_client.py`. **Python ↔ Convex always goes through HTTP actions authed with `CONVEX_BACKEND_KEY`** (see [convex/backend.ts](convex/backend.ts)) — never direct internal-function calls.
+**Audio capture moved Python → Rust client (2026-06-30)** so the backend runs **headless in the cloud** (Railway has no mic/speakers; `import sounddevice` even fails to load on Linux). The backend no longer owns capture: [ws/handler.py](backend/src/backend/ws/handler.py) now uses `websocket.receive()` (text = commands, bytes = audio frames) → `AgentSession.feed_audio()` → `AudioStreamingService.feed_audio()` → Deepgram. Device gating of `audio_source` (system/both = Ultra) is now effectively client-side; the **transcription-seconds quota stays server-enforced** via `PlanGate`.
+
+The Python backend is split by responsibility: `audio/` (Deepgram lifecycle + `feed_audio`; **local-capture classes removed** — `capture.py` is a stub), `llm/`, `agent/` (Deepgram wrapper), `ws/` (session coordinator + registry-based command parser + `security.py` Origin allowlist), `plan_gate.py`, `convex_client.py`. **Python ↔ Convex always goes through HTTP actions authed with `CONVEX_BACKEND_KEY`** — never direct internal-function calls.
 
 ## Build-breaking constraints
 
@@ -94,9 +98,21 @@ The Python backend is split by responsibility: `audio/` (three capture modes —
 - **Prod auth bug (not yet fixed):** [convex/auth.config.ts](convex/auth.config.ts) hardcodes the *dev* Clerk issuer. Prod needs the prod issuer (`clerk.wininterview.xyz`); the clean fix is reading `process.env.CLERK_ISSUER_URL`.
 - When provisioning prod: set `APP_ENV=live` **before** running `users:backfillUserKeys`, so generated keys get the `wik_live_` prefix.
 
+## Cloud deployment (Railway) — shipped 2026-06-30
+
+The Python backend is **deployed to Railway** (dev environment live and validated end-to-end). The desktop app no longer requires a local backend — it connects to the cloud over WSS, with **zero secrets in the client** (all real API keys live in Railway).
+
+- **Project** `winInterview-backend` (id `1f45c442-…`), service **`api`**, builds from **`backend/Dockerfile`** with **Root Directory = `backend`**. Tracks the **`main`** branch (auto-deploys on push). `/health` is the healthcheck.
+- **URLs:** `https://api-production-d6a6.up.railway.app` and the custom domain **`https://api-dev.wininterview.xyz`** (valid TLS). The desktop reaches it via WSS.
+- **Railway service env vars** (server-side, never in the client): `DEEPGRAM_API_KEY`, `DEEPSEEK_API_KEY`, `MINIMAX_API_KEY`, `CONVEX_BACKEND_KEY`, `VITE_CONVEX_URL`, `APP_ENV=dev`, `ALLOWED_ORIGINS`, `ENFORCE_WS_ORIGIN` (currently `false` = log-only; flip to `true` after confirming the real Tauri Origin — observed dev Origin is `http://localhost:5173`, prod build will be `http://tauri.localhost`).
+- **Custom domains need a `_railway-verify.<sub>` TXT ownership record** (private projects) **plus** the CNAME — Railway's dashboard (Settings → Networking) shows both; do NOT rely on the railway-agent for domains (it omits the TXT and churns the domain list). DNS for `wininterview.xyz` lives at **Hostinger**.
+- **Prod** Railway env is **not set up** — blocked on prod Convex (`unique-jaguar-230`) being provisioned.
+- The Tauri **installer + signed auto-updater** scaffolding exists (`src-tauri/src/audio.rs`, `useUpdater`, NSIS/MSI in `tauri.conf.json`, `updates-server/`, `.github/workflows/release.yml`) but is **not yet operational**: the updater signing key is ungenerated (pubkey is a placeholder) and `updates-server` is not deployed. `cargo check` passes.
+
 ## Environment files
 
-- Frontend `.env.local` — `VITE_CONVEX_URL`, `CONVEX_DEPLOYMENT` (`dev:qualified-cuttlefish-550`), and (still present for the dashboard/shared deployment) `VITE_CLERK_PUBLISHABLE_KEY`.
-- Backend `backend/.env` — `DEEPGRAM_API_KEY`, `DEEPSEEK_API_KEY`, `MINIMAX_API_KEY`, `CLERK_SECRET_KEY`, `CONVEX_BACKEND_KEY`.
+- Frontend `.env.local` (**gitignored**) — `VITE_CONVEX_URL`, `CONVEX_DEPLOYMENT` (`dev:qualified-cuttlefish-550`), `VITE_CLERK_PUBLISHABLE_KEY`. `.env.development.local` (gitignored) can override `VITE_BACKEND_WS_URL` to point `npm run tauri dev` at the cloud backend.
+- Frontend `.env.development` / `.env.staging` / `.env.production` (**committed — public build config only**) — set `VITE_BACKEND_WS_URL` per Vite mode (`ws://localhost:8000` / `wss://api-dev.wininterview.xyz` / `wss://api.wininterview.xyz`), plus public `VITE_CONVEX_URL` / `VITE_PADDLE_CLIENT_TOKEN`. The backend URL is **never hardcoded** — read from `import.meta.env.VITE_BACKEND_WS_URL` in [useWebSocket.ts](src/hooks/useWebSocket.ts) and [ScreenPanel.tsx](src/components/ScreenPanel.tsx).
+- Backend `backend/.env` (**gitignored**) — `DEEPGRAM_API_KEY`, `DEEPSEEK_API_KEY`, `MINIMAX_API_KEY`, `CLERK_SECRET_KEY`, `CONVEX_BACKEND_KEY`. In the cloud these are Railway service vars instead.
 - Convex deployment env (via `convex env set`) — Clerk, Paddle, `CONVEX_BACKEND_KEY`, `APP_ENV`.
-- All `.env*` files are gitignored.
+- **`.mcp.json` must never contain literal secrets** — use `${VAR}` env-var refs (`${PADDLE_LIVE_API_KEY}`, `${HOSTINGER_API_TOKEN}`) and set the var locally. A live Paddle key and a Hostinger token were each leaked here once (both since rotated); the file is committed, so a literal secret goes straight to the public repo.
