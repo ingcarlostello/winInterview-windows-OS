@@ -1,7 +1,7 @@
 export default {
   providers: [
     {
-      domain: "https://infinite-quail-91.clerk.accounts.dev",
+      domain: process.env.CLERK_ISSUER_URL ?? "https://infinite-quail-91.clerk.accounts.dev",
       applicationID: "convex",
     },
   ]

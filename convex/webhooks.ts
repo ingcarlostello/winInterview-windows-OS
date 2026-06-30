@@ -174,7 +174,8 @@ export const clerkWebhook = httpAction(async (ctx, request) => {
 
       const fullName = [firstName, lastName].filter(Boolean).join(" ") || undefined;
 
-      const tokenIdentifier = `https://infinite-quail-91.clerk.accounts.dev|${clerkId}`;
+      const issuer = process.env.CLERK_ISSUER_URL ?? "https://infinite-quail-91.clerk.accounts.dev";
+      const tokenIdentifier = `${issuer}|${clerkId}`;
 
       await ctx.runMutation(internal.users.createUserFromClerk, {
         clerkId,
