@@ -125,7 +125,10 @@ export type TranslationKey =
   | "keyLoginSubmit"
   | "keyLoginInvalid"
   | "keyLoginTitle"
-  | "keyLoginSubtitle";
+  | "keyLoginSubtitle"
+  | "keyLoginVerifying"
+  | "keyLoginNotFound"
+  | "keyLoginError";
 
 const translations: Record<Language, Record<TranslationKey, string>> = {
   es: {
@@ -256,6 +259,9 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     keyLoginInvalid: "Clave inválida (debe empezar con wik_).",
     keyLoginTitle: "Inicia sesión",
     keyLoginSubtitle: "Pega la clave de acceso de tu cuenta para continuar",
+    keyLoginVerifying: "Verificando...",
+    keyLoginNotFound: "Clave no encontrada. Verifica que sea la del entorno correcto (dev/prod).",
+    keyLoginError: "No se pudo verificar la clave. Revisa tu conexión.",
   },
   en: {
     statusDisconnected: "Disconnected",
@@ -385,6 +391,9 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     keyLoginInvalid: "Invalid key (must start with wik_).",
     keyLoginTitle: "Sign in",
     keyLoginSubtitle: "Paste your account access key to continue",
+    keyLoginVerifying: "Verifying...",
+    keyLoginNotFound: "Key not found. Make sure it matches the current environment (dev/prod).",
+    keyLoginError: "Couldn't verify the key. Check your connection.",
   },
 };
 
