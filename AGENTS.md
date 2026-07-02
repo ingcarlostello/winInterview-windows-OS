@@ -9,7 +9,7 @@
 - The app runs as a transparent, always-on-top overlay (`730×730` collapsed, `1600×730` expanded, frameless) designed to float over Zoom/Meet
 - **Flow** (audio capture moved Python → Rust client, 2026-06-30): Rust captures mic (`cpal`) + WASAPI loopback (`wasapi` crate) in `src-tauri/src/audio.rs` → 16kHz mono i16 PCM → base64 over a Tauri `Channel` → JS re-sends as **binary WebSocket frames** → backend `/ws` relays each frame to Deepgram Agent (ASR only) → transcription triggers LLM streaming via DeepSeek → Response chunks via WebSocket → Frontend renders Markdown + code blocks
 - **Screen capture**: Tauri command `capture_screen` in `src-tauri/src/lib.rs` uses the `xcap` crate to capture the first monitor, resizes to a max width of 1280 px, encodes as JPEG (quality 75), and returns base64 → stored in Zustand (`screenImages`, max 4). Each successful capture decrements `screen_captures` quota in Convex via `useCaptureQuota`. VisionLLMService (MiniMax-M3) analyzes captures via separate WebSocket
-- **Tier system**: Lite/Pro/Ultra plans gate features and quotas. **Convex is the source of truth** for `planId` and quota remaining; the Python backend reads them on every WebSocket connection via `ConvexClient` and enforces limits with `PlanGate`. Zustand (`planSlice`) caches the live state and receives updates from both the backend WebSocket (`PLAN_INFO`/`QUOTA_UPDATE`) and a reactive Convex query (`users.getCurrentUserPlanInfo`). Rust is a shortcut guardian (`update_plan_permissions`). Quotas reset per calendar month. **Paddle** manages subscriptions via webhooks → Convex updates `planId`; users without a subscription are on the `free` tier (3 min transcription trial, 0 captures/analyses).
+- **Tier system**: Lite/Pro/Ultra plans gate features and quotas. **Convex is the source of truth** for `planId` and quota remaining; the Python backend reads them on every WebSocket connection via `ConvexClient` and enforces limits with `PlanGate`. Zustand (`planSlice`) caches the live state and receives updates from both the backend WebSocket (`PLAN_INFO`/`QUOTA_UPDATE`) and a reactive Convex query (`users.getPlanInfoByUserKey` via `usePlanSync`). Rust is a shortcut guardian (`update_plan_permissions`). Quotas reset per calendar month. **Paddle** manages subscriptions via webhooks → Convex updates `planId`; users without a subscription are on the `free` tier (3 min transcription trial, 0 captures/analyses).
 
 ## Commands
 
@@ -65,7 +65,6 @@ Single store at `src/stores/interview.ts` (persisted settings via `persist` midd
 | `alwaysOnTop` | `boolean` | Window always-on-top state |
 | `theme` | `'dark' \| 'glass'` | Visual theme |
 | `screenPanelOpen` | `boolean` | Screen panel visibility |
-| `screenImage` | `string \| null` | Latest screen capture (base64) |
 | `screenImages` | `string[]` | Thumbnail grid (max 4) |
 | `screenChunks` | `string[]` | Vision analysis response chunks |
 | `isCapturingScreen` | `boolean` | Screen capture in progress |
@@ -74,11 +73,11 @@ Single store at `src/stores/interview.ts` (persisted settings via `persist` midd
 | `planInfo` | `PlanInfo \| null` | Current plan (Pro/Ultra/Free) + features + quotas. **Account-state** — persists across disconnect, cleared only on logout |
 | `userKey` | `string \| null` | Desktop access key (`wik_*`), persisted for session resumption |
 
-Persisted settings: `customPrompts`, `language`, `theme`, `audioSource`, `pendingUpgrade`, `userKey`
+Persisted settings: `customPrompts`, `language`, `theme`, `audioSource`, `userKey`
 
 **Account-state (persists disconnect/reconnect):** `planInfo`, `userKey` — cleared only on logout to prevent showing stale data to next user.
 
-Actions: `setStatus`, `setLanguage`, `setTranscription`, `addResponseChunk`, `clearResponse`, `setError`, `incrementQuestionsAnswered`, `setCustomPrompt`, `clearCustomPrompt`, `setShowPromptEditor`, `toggleGhostMode`, `toggleContentProtected`, `setAlwaysOnTop`, `setTheme`, `toggleScreenPanel`, `setScreenImage`, `addScreenImage`, `clearScreenImages`, `addScreenChunk`, `clearScreenChunks`, `setCapturingScreen`, `setAnalyzingScreen`, `setScreenPrompt`, `reset`
+Actions: `setStatus`, `setLanguage`, `setTranscription`, `addResponseChunk`, `clearResponse`, `setError`, `incrementQuestionsAnswered`, `setCustomPrompt`, `clearCustomPrompt`, `setShowPromptEditor`, `toggleGhostMode`, `toggleContentProtected`, `setAlwaysOnTop`, `setTheme`, `toggleScreenPanel`, `addScreenImage`, `addScreenChunk`, `clearScreenChunks`, `setCapturingScreen`, `setAnalyzingScreen`, `setScreenPrompt`, `reset`
 
 ### Hooks
 
@@ -206,21 +205,19 @@ Actions: `setStatus`, `setLanguage`, `setTranscription`, `addResponseChunk`, `cl
 | `plan_gate.py` | `FeatureBlockedError`, `QuotaExceededError` exceptions. `PlanGate` class: initializes usage from Convex remaining, enforces feature/quotas in-memory, and flushes consumption to Convex via `ConvexClient` |
 | `context.py` | `ConversationHistory` — message list management (system prompt + user/assistant messages, max 20, auto-trim). Used by `AgentSession` |
 | `dependencies.py` | DI singletons: `get_connection_manager()`, `get_llm_service()` (DeepSeekLLMService), `get_vision_service()` (VisionLLMService) |
-| `ws_manager.py` | `ConnectionManager` with typed sends using `WsMessageType`/`WsStatus` enums: `send_status`, `send_transcription`, `send_response_chunk`, `send_error`, `send_screen_chunk`, `send_screen_image` |
+| `ws_manager.py` | `ConnectionManager` with typed sends using `WsMessageType`/`WsStatus` enums: `send_status`, `send_transcription`, `send_response_chunk`, `send_error` |
 | `ws/handler.py` | `websocket_endpoint` FastAPI handler. Verifies Clerk JWT from `?token=` (with 10s leeway tolerance for clock skew), fetches plan/quotas from Convex via `ConvexClient`, creates `PlanGate`, and injects into `AgentSession`. Language/prompt/`audio_source` come from query params. Silently enforces `audio_source="mic"` if plan lacks `SYSTEM_AUDIO_CAPTURE`/`SIMULTANEOUS_AUDIO` features (same pattern as `thinking_mode`). Uses `CommandParser` via `create_default_parser()`. **2026-06-30:** the receive loop now uses `await websocket.receive()` — **text** messages → `CommandParser`; **binary** messages → `session.feed_audio(data)` (client-streamed audio → Deepgram). Calls `is_ws_origin_allowed()` (from `ws/security.py`) after `accept()` to check the `Origin` header against `allowed_origins` |
 | `ws/security.py` | **New 2026-06-30.** `is_ws_origin_allowed(websocket, session_id)` — logs the WS `Origin` header and, when `settings.enforce_ws_origin` is `true`, rejects connections whose `Origin` is present and not in `allowed_origins_list` (no-Origin native clients pass). Defense-in-depth on top of the opaque-key auth; used by both `ws/handler.py` and `routers/screens.py` |
 | `ws/session.py` | `AgentSession` class (~240 lines). Pure coordinator: wires `AudioStreamingService` ↔ `ConversationHistory` ↔ LLM/Vision ↔ WebSocket. Accepts optional `audio_service`, `history`, `audio_source` params for DI/testing. `DialogCoordinator` inner class handles business logic with `PlanGate` integration. `_send_plan_info()` on connect and after each flush. Feature gates on set/clear_prompt. Logs audio source choice on session start. **2026-06-30:** exposes `feed_audio(data)` which delegates client-streamed audio frames to `AudioStreamingService.feed_audio()` |
 | `ws/commands.py` | `WsCommand` enum: PAUSE, RESUME, CLEAR, SET_LANGUAGE, SET_PROMPT, CLEAR_PROMPT, CAPTURE_SCREEN. `ParsedCommand` dataclass |
 | `ws/command_parser.py` | `CommandParser` with registry-based handler pattern. `ExactMatchHandler` (no-payload commands), `PrefixMatchHandler` (colon-delimited payload). `create_default_parser()` factory |
-| `ws/message_types.py` | `WsMessageType` enum (STATUS, TRANSCRIPTION, CHUNK, ERROR, SCREEN_CHUNK, SCREEN_IMAGE, PLAN_INFO, QUOTA_UPDATE) and `WsStatus` enum (CONNECTED, LISTENING, THINKING, RESPONDING, PAUSED, RECONNECTING, CLEARED, CAPTURING, ANALYZING, COMPLETED, PROMPT_SAVED, PROMPT_CLEARED, QUOTA_EXCEEDED, FEATURE_BLOCKED) |
-| `audio/capture.py` | **Gutted to a docstring stub 2026-06-30** — the old `AudioCapture`/`SystemAudioCapture`/`MixedAudioCapture` classes (sounddevice/soundcard) were removed. Capture now lives client-side in Rust (`src-tauri/src/audio.rs`): cpal mic + `wasapi` loopback + averaging resampler + int32 anti-clip mix |
-| `audio/service.py` | `AudioStreamingService` — **no longer owns capture** (2026-06-30); manages only the Deepgram Agent lifecycle. `feed_audio(frame: bytes)` relays a client-captured 16 kHz mono i16 PCM frame to Deepgram (respecting pause/closed state). Callback-driven (`on_transcription`, `on_user_started_speaking`, `on_agent_error`). Handles keepalive loop, pause/resume, language restart |
+| `ws/message_types.py` | `WsMessageType` enum (STATUS, TRANSCRIPTION, CHUNK, ERROR, PLAN_INFO, QUOTA_UPDATE) and `WsStatus` enum (CONNECTED, LISTENING, THINKING, RESPONDING, PAUSED, RECONNECTING, CLEARED, ANALYZING, COMPLETED, PROMPT_SAVED, PROMPT_CLEARED, QUOTA_EXCEEDED, FEATURE_BLOCKED) |
+| `audio/service.py` | `AudioStreamingService` — **no longer owns capture** (2026-06-30; the old `capture.py` stub was deleted 2026-07-02 — capture lives client-side in Rust, `src-tauri/src/audio.rs`: cpal mic + `wasapi` loopback + averaging resampler + int32 anti-clip mix); manages only the Deepgram Agent lifecycle. `feed_audio(frame: bytes)` relays a client-captured 16 kHz mono i16 PCM frame to Deepgram (respecting pause/closed state). Callback-driven (`on_transcription`, `on_user_started_speaking`, `on_agent_error`). Handles keepalive loop, pause/resume, language restart |
 | `agent/deepgram.py` | `DeepgramAgent` class. Wraps Deepgram SDK v7+ Agent API. `nova-3` model. `send_media()` for PCM frames. `keep_alive()` sends keepalive + dummy audio |
 | `llm/prompt.py` | Default system prompts for ES/EN. Custom prompt CRUD via `prompts.json` file |
 | `llm/protocol.py` | `LLMService` Protocol with `stream_response()` async iterator interface |
 | `llm/deepseek.py` | `DeepSeekLLMService` implementing `LLMService`. DeepSeek API, model `deepseek-v4-flash` |
 | `llm/vision.py` | `VisionLLMService` for screen analysis. MiniMax endpoint (`https://api.minimax.io/v1`), model `MiniMax-M3`. `analyze_multiple_screens()`. Max_completion_tokens 16384, temperature 1.0, `thinking_enabled` parameter controls `extra_body={"thinking": {"type": "adaptive"|"disabled"}}` |
-| `screen/capture.py` | Reserved/legacy module (currently empty). Screen capture is implemented in the Tauri Rust layer at `src-tauri/src/lib.rs` |
 | `routers/prompts.py` | REST API: `GET /prompt?lang=`, `POST /prompt`, `DELETE /prompt?lang=` |
 | `routers/screens.py` | WebSocket: `/api/ws/analyze-screens` accepts `?token=`, verifies the Clerk JWT, fetches plan/quotas from Convex, then receives JSON with images array + prompt + `thinking_enabled` and streams vision analysis chunks. Uses `WsMessageType` enum. `PlanGate` per connection; gates `SIMULTANEOUS_ANALYSIS`, `THINKING_MODE`, and `SCREEN_ANALYSES` quota; silently forces `thinking_enabled=false` if plan lacks `THINKING_MODE`; flushes consumption to Convex on close |
 
@@ -232,8 +229,8 @@ All messages follow: `{"type": "...", "data": {...}}` (via `ConnectionManager`) 
 
 | Enum | Values |
 |---|---|
-| `WsMessageType` | `STATUS`, `TRANSCRIPTION`, `CHUNK`, `ERROR`, `SCREEN_CHUNK`, `SCREEN_IMAGE`, `PLAN_INFO`, `QUOTA_UPDATE` |
-| `WsStatus` | `CONNECTED`, `LISTENING`, `THINKING`, `RESPONDING`, `PAUSED`, `RECONNECTING`, `CLEARED`, `CAPTURING`, `ANALYZING`, `COMPLETED`, `PROMPT_SAVED`, `PROMPT_CLEARED`, `QUOTA_EXCEEDED`, `FEATURE_BLOCKED` |
+| `WsMessageType` | `STATUS`, `TRANSCRIPTION`, `CHUNK`, `ERROR`, `PLAN_INFO`, `QUOTA_UPDATE` |
+| `WsStatus` | `CONNECTED`, `LISTENING`, `THINKING`, `RESPONDING`, `PAUSED`, `RECONNECTING`, `CLEARED`, `ANALYZING`, `COMPLETED`, `PROMPT_SAVED`, `PROMPT_CLEARED`, `QUOTA_EXCEEDED`, `FEATURE_BLOCKED` (TS `WS_STATUS` also keeps a client-local `CAPTURING`) |
 
 ## Environment
 
@@ -433,16 +430,17 @@ The app uses **Paddle** for subscription billing. Paddle manages checkout, payme
 ### Subscription Flow
 
 ```
-Frontend (PricingModal) → useCheckout → Convex action: paddle.createCheckout
+Web dashboard (reactjs-site) → Convex action: paddle.createCheckout
     → Paddle: transactions.create (with custom_data.clerk_id + plan_id)
-    → Returns checkout.url → Tauri open_url command opens browser
     → User pays → Paddle fires webhook
     → POST /api/webhooks/paddle (Convex httpAction)
     → Verifies Paddle-Signature (HMAC-SHA256, ts;h1 format)
     → Extracts clerk_id from custom_data, plan_id from price.custom_data
     → internal.users.applySubscription → updates planId + quotas + paddle fields
-    → getCurrentUserPlanInfo (reactive) → planSlice → features unlocked
+    → Desktop: getPlanInfoByUserKey (reactive) + WS PLAN_INFO → planSlice → features unlocked
 ```
+
+The desktop app has **no in-app checkout** (removed 2026-07-02 along with `PricingModal`/`useCheckout`/`@paddle/paddle-js`): its Upgrade button (StatusBar crown badge) opens `WEBSITE_UPGRADE_URL` in the system browser via the Tauri `open_url` command. Billing lives entirely in the web dashboard.
 
 ### Webhook Events Handled
 
@@ -490,9 +488,7 @@ Frontend (PricingModal) → useCheckout → Convex action: paddle.createCheckout
 | `convex/http.ts` | Registers `/api/webhooks/paddle` and existing routes |
 | `convex/users.ts` | `applySubscription` (internalMutation — only way to change planId); `setPendingPlanChange`, `clearPendingPlanChange`, `applyDuePendingDowngrades` (manage downgrades); `isEventProcessed`, `recordSubscriptionEvent` (dedupe + audit); `getCurrentUserSubscription` query (returns subscription state + scheduled/pending changes) |
 | `convex/constants.ts` | `PlanId` includes `free`, `PLAN_QUOTAS`, `PLAN_FEATURES` (includes `thinking_mode` for Ultra), `PLAN_PRICES_USD`, `PLAN_RANK` (determines upgrade vs downgrade direction) |
-| `src/hooks/useCheckout.ts` | Calls `createCheckout` action, opens checkout URL via Tauri `open_url` command |
-| `src/components/PricingModal.tsx` | 3-tier pricing UI, subscribe buttons, subscription management (cancel/update payment via management_urls) |
-| `src/components/StatusBar.tsx` | Crown badge opens PricingModal |
+| `src/components/StatusBar.tsx` | Crown badge opens the website upgrade page (`WEBSITE_UPGRADE_URL`) via the Tauri `open_url` command |
 | `src-tauri/src/lib.rs` | `open_url` command — opens external URLs in system browser (cross-platform) |
 
 ### Security
@@ -578,7 +574,7 @@ The app can now capture **system audio (WASAPI loopback)** on Windows for Ultra-
    - Tolerates up to 10s desynchronization between Clerk issuer and backend (RFC 7519 standard)
    - Prevents "token not yet valid (iat)" 403 errors on immediate reconnection
 
-2. **COM Not Initialized** (`backend/src/backend/audio/capture.py`):
+2. **COM Not Initialized** (`backend/src/backend/audio/capture.py` — file since removed, 2026-07-02):
    - `SystemAudioCapture._capture_thread()` now calls `ctypes.windll.ole32.CoInitialize(None)` at start
    - Calls `CoUninitialize()` in `finally` block to clean up
    - Required because `soundcard` uses Windows COM API (WASAPI); COM must be initialized per-thread

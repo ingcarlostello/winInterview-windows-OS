@@ -71,46 +71,7 @@ export type TranslationKey =
   | "timeRemaining"
   | "sessionTimeTooltip"
   | "pricingTitle"
-  | "pricingSubtitle"
-  | "btnSubscribe"
-  | "btnCurrentPlan"
-  | "btnManage"
-  | "btnCancelSub"
-  | "btnUpdatePayment"
-  | "checkoutRedirecting"
-  | "checkoutError"
-  | "perMonth"
-  | "freeTierDesc"
-  | "freeTrialFeatures"
-  | "planFree"
-  | "planLite"
-  | "planPro"
-  | "planUltra"
-  | "featRealTime"
-  | "featStreaming"
-  | "featAlwaysOnTop"
-  | "featCustomPrompts"
-  | "featSimCaptures"
-  | "featSimAnalysis"
-  | "featShortcuts"
-  | "featInvisible"
-  | "featGhost"
-  | "quotaCaptures"
-  | "quotaAnalyses"
-  | "quotaTranscription"
-  | "subActive"
-  | "subCanceled"
-  | "subPastDue"
-  | "subPaused"
-  | "subStatus"
-  | "closeModal"
-  | "authLoading"
-  | "authError"
-  | "authErrorDesc"
-  | "btnRetry"
   | "btnLogout"
-  | "upgradeSuccess"
-  | "upgradeFallback"
   | "thinkingMode"
   | "audioSourceLabel"
   | "audioSourceMic"
@@ -208,46 +169,7 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     timeRemaining: "{count}m restantes",
     sessionTimeTooltip: "Tiempo de sesión transcurrido",
     pricingTitle: "Planes",
-    pricingSubtitle: "Elige el plan que se ajuste a tus necesidades",
-    btnSubscribe: "Suscribirse",
-    btnCurrentPlan: "Plan actual",
-    btnManage: "Gestionar",
-    btnCancelSub: "Cancelar suscripción",
-    btnUpdatePayment: "Actualizar pago",
-    checkoutRedirecting: "Redirigiendo al checkout...",
-    checkoutError: "Error al iniciar el checkout",
-    perMonth: "/mes",
-    freeTierDesc: "Plan gratuito",
-    freeTrialFeatures: "Prueba: 3 min transcripción + 1 captura + 1 análisis",
-    planFree: "Free",
-    planLite: "Lite",
-    planPro: "Pro",
-    planUltra: "Ultra",
-    featRealTime: "Transcripción en tiempo real",
-    featStreaming: "Respuestas en streaming",
-    featAlwaysOnTop: "Siempre on top",
-    featCustomPrompts: "Custom prompts",
-    featSimCaptures: "Capturas simultáneas",
-    featSimAnalysis: "Análisis simultáneos",
-    featShortcuts: "Atajos del teclado",
-    featInvisible: "Modo invisible",
-    featGhost: "Modo Fantasma (click-through)",
-    quotaCaptures: "{count} capturas/mes",
-    quotaAnalyses: "{count} análisis/mes",
-    quotaTranscription: "{count} min de conversación/mes",
-    subActive: "Activa",
-    subCanceled: "Cancelada",
-    subPastDue: "Pago pendiente",
-    subPaused: "Pausada",
-    subStatus: "Estado de suscripción",
-    closeModal: "Cerrar",
-    authLoading: "Cargando...",
-    authError: "Error de conexión",
-    authErrorDesc: "No se pudo conectar con el servicio de autenticación. Verifica tu conexión e inténtalo de nuevo.",
-    btnRetry: "Reintentar",
     btnLogout: "Cerrar sesión",
-    upgradeSuccess: "¡Suscripción activada! Tu plan {plan} está listo.",
-    upgradeFallback: "Si completaste tu compra y no ves los cambios, cierra sesión y vuelve a iniciar sesión.",
     thinkingMode: "Modo pensamiento",
     audioSourceLabel: "Fuente de audio",
     audioSourceMic: "Micrófono",
@@ -344,46 +266,7 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     timeRemaining: "{count}m left",
     sessionTimeTooltip: "Session time elapsed",
     pricingTitle: "Plans",
-    pricingSubtitle: "Choose the plan that fits your needs",
-    btnSubscribe: "Subscribe",
-    btnCurrentPlan: "Current plan",
-    btnManage: "Manage",
-    btnCancelSub: "Cancel subscription",
-    btnUpdatePayment: "Update payment",
-    checkoutRedirecting: "Redirecting to checkout...",
-    checkoutError: "Error starting checkout",
-    perMonth: "/mo",
-    freeTierDesc: "Free plan",
-    freeTrialFeatures: "Trial: 3 min transcription + 1 capture + 1 analysis",
-    planFree: "Free",
-    planLite: "Lite",
-    planPro: "Pro",
-    planUltra: "Ultra",
-    featRealTime: "Real-time transcription",
-    featStreaming: "Streaming responses",
-    featAlwaysOnTop: "Always on top",
-    featCustomPrompts: "Custom prompts",
-    featSimCaptures: "Simultaneous captures",
-    featSimAnalysis: "Simultaneous analysis",
-    featShortcuts: "Keyboard shortcuts",
-    featInvisible: "Invisible mode",
-    featGhost: "Ghost mode (click-through)",
-    quotaCaptures: "{count} captures/mo",
-    quotaAnalyses: "{count} analyses/mo",
-    quotaTranscription: "{count} min conversation/mo",
-    subActive: "Active",
-    subCanceled: "Canceled",
-    subPastDue: "Payment pending",
-    subPaused: "Paused",
-    subStatus: "Subscription status",
-    closeModal: "Close",
-    authLoading: "Loading...",
-    authError: "Connection error",
-    authErrorDesc: "Could not connect to the authentication service. Check your connection and try again.",
-    btnRetry: "Retry",
     btnLogout: "Sign out",
-    upgradeSuccess: "Subscription activated! Your {plan} plan is ready.",
-    upgradeFallback: "If you completed your purchase and don't see changes, sign out and sign back in.",
     thinkingMode: "Thinking mode",
     audioSourceLabel: "Audio source",
     audioSourceMic: "Microphone",

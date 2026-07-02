@@ -13,6 +13,7 @@ import {
   Move
 } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { invoke } from "@tauri-apps/api/core";
 import { useInterviewStore } from "../stores/interview";
 import type { Status } from "../stores/interview";
 import LanguageSelector from "./LanguageSelector";
@@ -20,7 +21,6 @@ import AudioSourceSelector from "./AudioSourceSelector";
 import SessionTimer from "./SessionTimer";
 import { useTranslation } from "../hooks/useTranslation";
 import { useFeatureGate, useQuotaInfo } from "../hooks/useFeatureGate";
-import { useCheckout } from "../hooks/useCheckout";
 import { WEBSITE_UPGRADE_URL } from "../constants/links";
 
 type StatusStyle = {
@@ -117,7 +117,14 @@ export default function StatusBar({
   const planInfo = useInterviewStore((s) => s.planInfo);
   const config = statusConfig[status];
   const { t } = useTranslation();
-  const { openExternalUrl } = useCheckout();
+  // Plans/billing are managed on the website; the desktop app only routes there.
+  const openUpgradePage = async () => {
+    try {
+      await invoke("open_url", { url: WEBSITE_UPGRADE_URL });
+    } catch (err) {
+      console.error("[StatusBar] Failed to open URL:", err);
+    }
+  };
   const { allowed: canUseGhostMode } = useFeatureGate("ghost_mode");
   const { allowed: canUseInvisibleMode } = useFeatureGate("invisible_mode");
   const { remaining: transcriptionRemaining, exceeded: transcriptionExceeded } =
@@ -224,7 +231,7 @@ export default function StatusBar({
           </span>
 
           <button
-            onClick={() => openExternalUrl(WEBSITE_UPGRADE_URL)}
+            onClick={openUpgradePage}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-white/10 bg-white/5 hover:bg-white/10 transition-colors cursor-pointer ${planColorClass}`}
             title={t("pricingTitle")}
           >

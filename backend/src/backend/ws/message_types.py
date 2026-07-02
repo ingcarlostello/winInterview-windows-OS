@@ -8,8 +8,6 @@ class WsMessageType(str, Enum):
     TRANSCRIPTION = "transcription"
     CHUNK = "chunk"
     ERROR = "error"
-    SCREEN_CHUNK = "screen_chunk"
-    SCREEN_IMAGE = "screen_image"
     PLAN_INFO = "plan_info"
     QUOTA_UPDATE = "quota_update"
 
@@ -24,7 +22,6 @@ class WsStatus(str, Enum):
     PAUSED = "paused"
     RECONNECTING = "reconnecting"
     CLEARED = "cleared"
-    CAPTURING = "capturing"
 
     ANALYZING = "analyzing"
     COMPLETED = "completed"

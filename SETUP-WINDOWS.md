@@ -5,7 +5,7 @@
 ✅ Python 3.14.6  
 ✅ Poetry 2.4.1  
 ✅ Microsoft Visual Studio Build Tools 2026  
-✅ Node.js (con pnpm 11.9.0)  
+✅ Node.js (npm es el gestor canónico del repo)  
 ✅ Dependencias del backend (con sounddevice en lugar de pyaudio)
 
 ## Cómo iniciar la aplicación
@@ -37,13 +37,7 @@ poetry run uvicorn backend.main:app --reload --port 8000
 
 **Terminal 2 — Frontend:**
 ```powershell
-pnpm install  # Solo la primera vez
-pnpm run tauri dev
-```
-
-O con npm si prefieres:
-```powershell
-npm install
+npm install  # Solo la primera vez
 npm run tauri dev
 ```
 
@@ -79,10 +73,8 @@ winget install OpenJS.NodeJS
 ### Error: "poetry no se reconoce"
 Asegúrate de estar en la carpeta raíz del proyecto y usa los scripts `start-*.ps1`
 
-### Error: "pnpm tauri no se reconoce"  
-Primero ejecuta: `pnpm install`
-
-O usa npm si pnpm no funciona: `npm install && npm run tauri dev`
+### Error: "npm run tauri no se reconoce"  
+Primero ejecuta: `npm install`
 
 ### Error: "Backend no inicia"
 Verifica que el puerto 8000 esté disponible: `netstat -an | findstr ":8000"`

@@ -11,7 +11,6 @@ import { useTranslation } from "./hooks/useTranslation";
 import { usePlanSync } from "./hooks/usePlanSync";
 import { useScreenCapture } from "./hooks/useScreenCapture";
 import { useTranscriptionCountdown } from "./hooks/useTranscriptionCountdown";
-import { usePendingUpgrade } from "./hooks/usePendingUpgrade";
 import { useUpdater } from "./hooks/useUpdater";
 
 export default function App() {
@@ -23,7 +22,6 @@ export default function App() {
   usePlanSync();
   const { captureScreen } = useScreenCapture();
   useTranscriptionCountdown();
-  usePendingUpgrade();
 
   const handleLogout = () => {
     disconnect();

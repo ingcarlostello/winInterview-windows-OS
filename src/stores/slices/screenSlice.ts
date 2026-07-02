@@ -3,16 +3,13 @@ import type { RootState } from "../interview";
 
 export interface ScreenSlice {
   screenPanelOpen: boolean;
-  screenImage: string | null;
   screenImages: string[];
   screenChunks: string[];
   isCapturingScreen: boolean;
   isAnalyzingScreen: boolean;
   screenPrompt: string;
   setScreenPanelOpen: (open: boolean) => void;
-  setScreenImage: (image: string | null) => void;
   addScreenImage: (image: string) => void;
-  clearScreenImages: () => void;
   addScreenChunk: (chunk: string) => void;
   clearScreenChunks: () => void;
   clearScreen: () => void;
@@ -24,7 +21,6 @@ export interface ScreenSlice {
 
 export const createScreenSlice: StateCreator<RootState, [], [], ScreenSlice> = (set, get) => ({
   screenPanelOpen: false,
-  screenImage: null,
   screenImages: [],
   screenChunks: [],
   isCapturingScreen: false,
@@ -32,13 +28,11 @@ export const createScreenSlice: StateCreator<RootState, [], [], ScreenSlice> = (
   screenPrompt: "",
 
   setScreenPanelOpen: (open) => set({ screenPanelOpen: open }),
-  setScreenImage: (image) => set({ screenImage: image }),
   addScreenImage: (image) =>
     set((state) => {
       if (state.screenImages.length >= 4) return state;
       return { screenImages: [...state.screenImages, image] };
     }),
-  clearScreenImages: () => set({ screenImages: [] }),
   addScreenChunk: (chunk) =>
     set((state) => ({
       screenChunks: [...state.screenChunks, chunk],
@@ -47,7 +41,6 @@ export const createScreenSlice: StateCreator<RootState, [], [], ScreenSlice> = (
   clearScreen: () =>
     set({
       screenChunks: [],
-      screenImage: null,
       screenImages: [],
       isAnalyzingScreen: false,
     }),
