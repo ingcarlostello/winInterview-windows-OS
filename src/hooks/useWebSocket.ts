@@ -4,6 +4,7 @@ import { useInterviewStore } from "../stores/interview";
 import type { Status } from "../stores/interview";
 import type { PlanInfo } from "../stores/slices/planSlice";
 import type { Language } from "../stores/slices/settingsSlice";
+import { gateAudioSource } from "../stores/slices/settingsSlice";
 import { WS_MESSAGE_TYPE, WS_STATUS } from "../constants/ws";
 import { useAppAuth } from "./useAppAuth";
 
@@ -123,9 +124,18 @@ export function useWebSocket() {
         setStatus("idle");
         return;
       }
-      const language = useInterviewStore.getState().language;
-      const planId = useInterviewStore.getState().planInfo?.plan_id ?? "free";
-      const audioSource = useInterviewStore.getState().audioSource;
+      const state = useInterviewStore.getState();
+      const language = state.language;
+      const planId = state.planInfo?.plan_id ?? "free";
+      // Gate the persisted audioSource against the current plan before it drives
+      // the Rust capture: a stale "system"/"both" value must fall back to "mic"
+      // for non-Ultra plans (hasFeature falls back to free when planInfo is null,
+      // so the safe default is "mic" even before the plan resolves).
+      const audioSource = gateAudioSource(
+        state.audioSource,
+        state.hasFeature("system_audio_capture"),
+        state.hasFeature("simultaneous_audio"),
+      );
 
       const ws = new WebSocket(`${WS_BASE}?lang=${language}&plan=${planId}&audio_source=${audioSource}&${authParam}`);
       wsRef.current = ws;
@@ -231,6 +241,19 @@ export function useWebSocket() {
             } else {
               invoke("set_content_protected", { enabled: false }).catch(() => {});
               useInterviewStore.getState().setContentProtected(false);
+            }
+            // Reset a stale persisted audioSource the plan can't use (same pattern
+            // as content protection above) so the store/localStorage stay honest.
+            {
+              const currentSource = useInterviewStore.getState().audioSource;
+              const gatedSource = gateAudioSource(
+                currentSource,
+                planInfo.features.system_audio_capture,
+                planInfo.features.simultaneous_audio,
+              );
+              if (gatedSource !== currentSource) {
+                useInterviewStore.getState().setAudioSource(gatedSource);
+              }
             }
             break;
           }
