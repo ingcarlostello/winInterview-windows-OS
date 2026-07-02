@@ -1,0 +1,35 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1024" y2="1024" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0d0f14"/>
+      <stop offset="1" stop-color="#08090c"/>
+    </linearGradient>
+    <linearGradient id="lime" x1="300" y1="320" x2="760" y2="720" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#c7f755"/>
+      <stop offset="1" stop-color="#84cc16"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="512" cy="500" r="360" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#a3e635" stop-opacity="0.30"/>
+      <stop offset="1" stop-color="#a3e635" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="soft" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="14"/>
+    </filter>
+  </defs>
+
+  <!-- rounded-square background -->
+  <rect x="48" y="48" width="928" height="928" rx="216" fill="url(#bg)"/>
+  <rect x="48.5" y="48.5" width="927" height="927" rx="215.5" fill="none" stroke="#a3e635" stroke-opacity="0.20" stroke-width="3"/>
+
+  <!-- glow behind mark -->
+  <ellipse cx="512" cy="512" rx="340" ry="340" fill="url(#glow)"/>
+
+  <!-- W monogram: blurred glow copy -->
+  <path d="M280 330 L392 700 L512 430 L632 700 L744 330"
+        fill="none" stroke="#a3e635" stroke-opacity="0.55" stroke-width="70"
+        stroke-linecap="round" stroke-linejoin="round" filter="url(#soft)"/>
+  <!-- W monogram: crisp -->
+  <path d="M280 330 L392 700 L512 430 L632 700 L744 330"
+        fill="none" stroke="url(#lime)" stroke-width="70"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
