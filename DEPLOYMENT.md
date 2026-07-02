@@ -41,11 +41,19 @@ Code changes already applied:
    reconcile `run_loopback()` (notably `initialize_client` — 0.23+ takes a
    `StreamMode`). The mic path (`cpal`) and the rest are standard.
 2. **Generate the updater signing key** and paste the public key into
-   `tauri.conf.json` → `plugins.updater.pubkey` (currently a placeholder):
+   `tauri.conf.json` → `plugins.updater.pubkey`. **DONE (2026-07-01):** generated
+   non-interactively with an **empty password** (to avoid the Tauri
+   password-via-env CI bug) and the real pubkey is committed:
    ```
-   npm run tauri signer generate -- -w ~/.tauri/wininterview.key
+   node node_modules/@tauri-apps/cli/tauri.js signer generate -w ~/.tauri/wininterview.key -f --ci
    ```
-   Keep the private key + password as CI secrets (below). Never commit them.
+   **KEY CUSTODY — one-way door.** The pubkey is compiled into every binary; if
+   the private key is lost, all already-installed clients are permanently unable
+   to auto-update (no cryptographic recovery — the only fix is to ship a new
+   pubkey and have every user reinstall manually). Back up `~/.tauri/wininterview.key`
+   in a secrets vault **and** offline. It has no password, so its only protection
+   is secrecy. Never commit it. It is also stored as the CI secret
+   `TAURI_SIGNING_PRIVATE_KEY` (empty `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`).
 3. **`poetry.lock`** has been regenerated for the trimmed deps. If you change
    `backend/pyproject.toml` again, re-run `cd backend && poetry lock`.
 
@@ -92,19 +100,26 @@ Code changes already applied:
 
 ## 2. Railway — `updates` service (auto-update host)
 
-1. Add a second service in the **same** project, **Root Directory = `updates-server`**.
-2. Attach a **Volume** mounted at `/data` (Settings → Volumes).
-3. Variables (per environment):
-   - `UPDATES_PUBLISH_TOKEN` — strong random secret (shared with CI).
-   - `UPDATES_PUBLIC_BASE_URL` — `https://updates.wininterview.xyz` (prod) /
-     `https://updates-dev.wininterview.xyz` (dev).
-   - `UPDATES_DATA_DIR=/data` (already defaulted in the Dockerfile).
-4. Custom domain `updates.wininterview.xyz` (prod) / `updates-dev.wininterview.xyz`
-   (dev) — CNAME + TXT as above. This must match `plugins.updater.endpoints` in
-   `tauri.conf.json`.
+**DEPLOYED (2026-07-01)** in project `winInterview-backend`, env **`prod`**:
+service **`updates`** (`9190f6f0-5665-4456-8738-2529589bfb00`), Volume
+`b3325995-0afb-411c-9417-a6601797bbbc` at `/data`, root `updates-server`
+(Dockerfile), healthcheck `/health` green (uvicorn on `:8080`, `/health` → 200).
 
-`GET /latest.json` serves the manifest; `GET /<file>` serves installers;
-`POST /publish` (Bearer `UPDATES_PUBLISH_TOKEN`) accepts a new release from CI.
+1. Add a service in the **same** project, **Root Directory = `updates-server`**.
+2. Attach a **Volume** mounted at `/data` (must exist BEFORE the first `/publish`,
+   else artifacts land on the ephemeral FS and vanish on redeploy).
+3. Variables set: `UPDATES_PUBLISH_TOKEN` (strong random, **must match** the CI
+   secret of the same name), `UPDATES_PUBLIC_BASE_URL=https://updates.wininterview.xyz`,
+   `UPDATES_DATA_DIR=/data`.
+4. Custom domain `updates.wininterview.xyz` — **PENDING**: add it in the Railway
+   dashboard (Settings → Networking) for the `updates` service, then create the
+   **CNAME + `_railway-verify.updates` TXT** it shows at Hostinger (same pattern as
+   `api`/`api-dev`). Do NOT use railway-agent for the domain (it omits the TXT).
+   This must match `plugins.updater.endpoints` in `tauri.conf.json`.
+
+`GET /latest.json` serves the manifest (404 before the first publish = treated as
+"up to date" — expected); `GET /<file>` serves installers; `POST /publish`
+(Bearer `UPDATES_PUBLISH_TOKEN`) accepts a new release from CI.
 
 ---
 
@@ -129,17 +144,36 @@ uses the NSIS `*-setup.exe`.
 
 ---
 
-## 4. Release flow (CI → updates service)
+## 4. Release flow (CI → updates service + GitHub Release)
 
-1. Set repo **secrets**: `TAURI_SIGNING_PRIVATE_KEY`,
-   `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, `UPDATES_PUBLISH_TOKEN`; and **variable**
-   `UPDATES_URL=https://updates.wininterview.xyz`.
-2. Bump the version in **both** `package.json` and `src-tauri/tauri.conf.json`
-   (must match; the updater compares it).
-3. Tag and push: `git tag v0.2.0 && git push --tags`.
-4. `.github/workflows/release.yml` (Windows runner) builds + signs, then POSTs the
-   `*-setup.exe` + `.sig` to `${UPDATES_URL}/publish`, which regenerates
-   `latest.json`. Installed apps auto-update on next launch (`useUpdater`).
+1. Set repo **secrets**: `TAURI_SIGNING_PRIVATE_KEY` (content of
+   `~/.tauri/wininterview.key`), `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (empty),
+   `UPDATES_PUBLISH_TOKEN` (**identical** to the Railway `updates` var); and
+   **variable** `UPDATES_URL=https://updates.wininterview.xyz`.
+2. **Version invariant (enforced in CI):** the tag (minus `v`) must equal
+   `package.json` **and** `src-tauri/tauri.conf.json` `version`. The workflow's
+   "Verify tag matches app version" step fails the build on any mismatch — CI
+   derives the manifest version from the tag, but the updater compares it to the
+   version compiled from `tauri.conf.json`, so a mismatch strands clients.
+3. Tag and push: `git tag v0.1.0 && git push origin v0.1.0`.
+4. `.github/workflows/release.yml` (Windows runner) verifies the version, builds +
+   signs, POSTs the NSIS `*-setup.exe` + `.sig` to `${UPDATES_URL}/publish` (which
+   regenerates `latest.json`), and creates a **GitHub Release** with the
+   `*-setup.exe` + `.sig` + `*.msi` attached. The GitHub Release is the canonical
+   **first-time download** link for new users (the updater only reaches already-
+   installed apps) and the artifact archive for rollback. Installed apps surface an
+   in-app "Restart now / Later" prompt on next launch (`useUpdater` + `UpdateBanner`);
+   they never auto-relaunch on their own.
+
+### Rollback / blast radius
+
+Every `/publish` overwrites `latest.json` and reaches **100% of clients** on their
+next launch (no staged rollout with a single manifest). The updater is
+**forward-only** — it never downgrades — so you cannot pull a bad version back by
+re-publishing the previous one. **Rollback = roll-forward:** publish a higher
+version (e.g. `v0.1.2`) containing the fix/revert. To stop *not-yet-updated*
+clients from taking a bad build, blank/replace `latest.json` on the `updates`
+volume. Every signed artifact is archived on its GitHub Release for quick rebuild.
 
 ---
 
@@ -159,9 +193,16 @@ uses the NSIS `*-setup.exe`.
 
 ## Follow-ups / known items
 
-- **Authenticode (recommended):** without it, Windows SmartScreen warns "unknown
-  publisher" on first install. Add via `bundle.windows.signCommand` (Azure Trusted
-  Signing is the cheapest indie path). Independent of the updater's minisign sig.
+- **Authenticode (DEFERRED for v1 by decision 2026-07-01):** without it, Windows
+  SmartScreen warns "unknown publisher" on first install (does not block install or
+  affect auto-update). Put a "click *More info → Run anyway*" note next to the
+  download link. Revisit with **Azure Trusted Signing** (~$10/mo, cheapest indie
+  path) or an EV cert if it measurably costs installs. Add via
+  `bundle.windows.signCommand`. Independent of the updater's minisign sig.
+- **Updater UX (shipped 2026-07-01):** `useUpdater` downloads silently in the
+  background but never auto-installs/relaunches; `UpdateBanner` shows a
+  non-blocking "Restart now / Later" prompt so a relaunch can't land mid-interview.
+  "Later" re-prompts on the next launch.
 - **Pause optimization (optional):** the client keeps capturing while the WS is
   open (frames dropped server-side during pause). Hook `stop_audio`/`start_audio`
   to pause/resume to free the mic during pauses.

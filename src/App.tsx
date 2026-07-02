@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { KeyRound } from "lucide-react";
 import Overlay from "./components/Overlay";
 import KeyLoginForm from "./components/KeyLoginForm";
+import UpdateBanner from "./components/UpdateBanner";
 import { useWebSocket } from "./hooks/useWebSocket";
 import { useInterviewStore } from "./stores/interview";
 import { useTranslation } from "./hooks/useTranslation";
@@ -18,7 +19,7 @@ export default function App() {
   const { t } = useTranslation();
   const userKey = useInterviewStore((s) => s.userKey);
   const clearUserKey = useInterviewStore((s) => s.clearUserKey);
-  useUpdater();
+  const updater = useUpdater();
   usePlanSync();
   const { captureScreen } = useScreenCapture();
   useTranscriptionCountdown();
@@ -62,10 +63,12 @@ export default function App() {
   // (localStorage) rehydrates synchronously, so there's no login flash on restart.
   if (!userKey) {
     return (
-      <div
-        className="flex h-screen w-screen items-center justify-center bg-[#08090c] text-white"
-        data-tauri-drag-region
-      >
+      <>
+        <UpdateBanner {...updater} />
+        <div
+          className="flex h-screen w-screen items-center justify-center bg-[#08090c] text-white"
+          data-tauri-drag-region
+        >
         <div className="flex w-full max-w-sm flex-col items-center gap-6 rounded-2xl border border-white/10 bg-[#0f1115] p-8 shadow-2xl">
           <div className="flex flex-col items-center gap-2 text-center">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#a3e635]/10">
@@ -75,13 +78,16 @@ export default function App() {
             <p className="text-xs text-white/50">{t("keyLoginSubtitle")}</p>
           </div>
           <KeyLoginForm />
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
   return (
-    <Overlay
+    <>
+      <UpdateBanner {...updater} />
+      <Overlay
       onPause={() => send("pause")}
       onResume={() => send("resume")}
       onConnect={connect}
@@ -91,6 +97,7 @@ export default function App() {
       onChangeLanguage={changeLanguage}
       onToggleScreenPanel={toggleScreenPanel}
       onLogout={handleLogout}
-    />
+      />
+    </>
   );
 }
