@@ -145,6 +145,16 @@ export function useWebSocket() {
       setSessionStartTime(Date.now());
       reconnectAttemptsRef.current = 0;
       errorReceivedRef.current = false;
+      // Re-apply the saved custom prompt for this language. A fresh session
+      // starts with the default system prompt (the connect URL carries no
+      // prompt and the Convex prompts table is unused for key-auth), so without
+      // this the LLM would ignore the user's saved prompt until they clicked
+      // Save again. The backend plan-gates set_prompt, so free/lite sessions
+      // ignore it with no effect.
+      const savedPrompt = useInterviewStore.getState().customPrompts[language]?.trim();
+      if (savedPrompt) {
+        ws.send(`set_prompt:${savedPrompt}`);
+      }
       // Begin streaming locally-captured audio frames to the backend.
       void startClientAudio(ws, audioSource);
     };
@@ -378,6 +388,12 @@ export function useWebSocket() {
 
   const changeLanguage = useCallback((language: string) => {
     send(`set_language:${language}`);
+    // The backend resets the conversation history to the default prompt on a
+    // language switch, so re-apply the saved custom prompt for the new language.
+    const savedPrompt = useInterviewStore.getState().customPrompts[language as Language]?.trim();
+    if (savedPrompt) {
+      send(`set_prompt:${savedPrompt}`);
+    }
   }, [send]);
 
   return { send, disconnect, connect, setPrompt, restoreDefaultPrompt, changeLanguage };

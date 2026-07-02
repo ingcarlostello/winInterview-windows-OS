@@ -7,10 +7,8 @@ import { createPlanSlice, type PlanSlice } from "./slices/planSlice";
 import { createUISlice, type UISlice } from "./slices/uiSlice";
 import { createAuthSlice, type AuthSlice } from "./slices/authSlice";
 
-export type { Status, QAEntry } from "./slices/sessionSlice";
-export type { Language, Theme } from "./slices/settingsSlice";
-export type { PlanId, FeatureFlags, QuotaInfo, PlanInfo, PendingUpgrade } from "./slices/planSlice";
-export type { ToastType, ToastState } from "./slices/uiSlice";
+export type { Status } from "./slices/sessionSlice";
+export type { Language } from "./slices/settingsSlice";
 
 export interface RootState extends SessionSlice, SettingsSlice, ScreenSlice, PlanSlice, UISlice, AuthSlice {
   reset: () => void;
@@ -49,7 +47,6 @@ export const useInterviewStore = create<RootState>()(
         language: state.language,
         theme: state.theme,
         audioSource: state.audioSource,
-        pendingUpgrade: state.pendingUpgrade,
         userKey: state.userKey,
       }),
       migrate: (persistedState: unknown) => {

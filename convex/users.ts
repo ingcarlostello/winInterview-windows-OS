@@ -25,8 +25,7 @@ function buildFeatureFlags(planId: PlanId): Record<string, boolean> {
 }
 
 // Maps a users doc → the frontend `PlanInfo` shape (snake_case plan_id/quotas).
-// Shared by the Clerk-identity query (getCurrentUserPlanInfo) and the access-key
-// query (getPlanInfoByUserKey) so both return byte-identical plan info.
+// Used by the access-key query (getPlanInfoByUserKey).
 async function buildPlanInfoForUser(ctx: QueryCtx, user: Doc<"users">) {
   const planId = (user.planId as PlanId) ?? "free";
   const month = new Date().toISOString().slice(0, 7);
@@ -205,34 +204,11 @@ export const getCurrentUser = query({
   },
 });
 
-export const getCurrentUserPlanInfo = query({
-  args: {},
-  handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      return null;
-    }
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_token", (q) =>
-        q.eq("tokenIdentifier", identity.tokenIdentifier)
-      )
-      .unique();
-
-    if (!user) {
-      return null;
-    }
-
-    return buildPlanInfoForUser(ctx, user);
-  },
-});
-
-// Public: access-key counterpart of getCurrentUserPlanInfo. A desktop session that
-// logged in with a pasted access key has no Clerk JWT, so it cannot use the
-// identity-based query above; it resolves the user by their userKey instead and
-// returns the same PlanInfo shape. The userKey is a high-entropy bearer secret the
-// caller already holds (it grants full app login), so exposing plan metadata to its
+// Public: resolves a desktop session's plan info by its access key. A desktop
+// session that logged in with a pasted access key has no Clerk JWT, so it resolves
+// the user by their userKey and returns the `PlanInfo` shape from
+// buildPlanInfoForUser. The userKey is a high-entropy bearer secret the caller
+// already holds (it grants full app login), so exposing plan metadata to its
 // holder adds no meaningful surface. Returns null for an unknown/empty key.
 export const getPlanInfoByUserKey = query({
   args: {

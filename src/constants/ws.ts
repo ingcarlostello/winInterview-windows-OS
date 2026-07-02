@@ -3,8 +3,6 @@ export const WS_MESSAGE_TYPE = {
   TRANSCRIPTION: "transcription",
   CHUNK: "chunk",
   ERROR: "error",
-  SCREEN_CHUNK: "screen_chunk",
-  SCREEN_IMAGE: "screen_image",
   PLAN_INFO: "plan_info",
   QUOTA_UPDATE: "quota_update",
 } as const;
@@ -18,7 +16,6 @@ export const WS_STATUS = {
   RECONNECTING: "reconnecting",
   CLEARED: "cleared",
   CAPTURING: "capturing",
-  ANALYZING: "analyzing",
   COMPLETED: "completed",
   PROMPT_SAVED: "prompt_saved",
   PROMPT_CLEARED: "prompt_cleared",

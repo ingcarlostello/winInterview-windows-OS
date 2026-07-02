@@ -15,7 +15,7 @@ updater public key + the user's own opaque `wik_*` key (entered at runtime).
 
 Code changes already applied:
 - Backend: `ws/handler.py` (text+binary receive), `audio/service.py` (`feed_audio`,
-  no local capture), `audio/capture.py` (gutted), `ws/security.py` (Origin allowlist),
+  no local capture), `audio/capture.py` (gutted, then deleted 2026-07-02), `ws/security.py` (Origin allowlist),
   `main.py`/`config.py` (CORS allowlist + env), `pyproject.toml` (removed
   sounddevice/soundcard/numpy), `Dockerfile` + `railway.json` + `.dockerignore`.
 - Frontend: `useWebSocket.ts` / `ScreenPanel.tsx` (URL from `VITE_BACKEND_WS_URL`,
