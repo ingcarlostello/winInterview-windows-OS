@@ -41,19 +41,22 @@ Code changes already applied:
    reconcile `run_loopback()` (notably `initialize_client` — 0.23+ takes a
    `StreamMode`). The mic path (`cpal`) and the rest are standard.
 2. **Generate the updater signing key** and paste the public key into
-   `tauri.conf.json` → `plugins.updater.pubkey`. **DONE (2026-07-01):** generated
-   non-interactively with an **empty password** (to avoid the Tauri
-   password-via-env CI bug) and the real pubkey is committed:
+   `tauri.conf.json` → `plugins.updater.pubkey`. **DONE (2026-07-01):** the real
+   pubkey is committed and the key has a **non-empty password**. (An empty
+   password does NOT work on Windows: PowerShell's
+   `$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = ""` *deletes* the variable, so the
+   signer prompts interactively and the build hangs forever. The keypair was
+   regenerated with a strong password; the committed pubkey matches that key.)
    ```
-   node node_modules/@tauri-apps/cli/tauri.js signer generate -w ~/.tauri/wininterview.key -f --ci
+   node node_modules/@tauri-apps/cli/tauri.js signer generate -w ~/.tauri/wininterview.key -f
    ```
    **KEY CUSTODY — one-way door.** The pubkey is compiled into every binary; if
-   the private key is lost, all already-installed clients are permanently unable
-   to auto-update (no cryptographic recovery — the only fix is to ship a new
-   pubkey and have every user reinstall manually). Back up `~/.tauri/wininterview.key`
-   in a secrets vault **and** offline. It has no password, so its only protection
-   is secrecy. Never commit it. It is also stored as the CI secret
-   `TAURI_SIGNING_PRIVATE_KEY` (empty `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`).
+   the private key **or its password** is lost, all already-installed clients are
+   permanently unable to auto-update (no cryptographic recovery — the only fix is
+   to ship a new pubkey and have every user reinstall manually). Back up
+   `~/.tauri/wininterview.key` **and the password** in a secrets vault **and**
+   offline. Never commit them. They are also stored as the CI secrets
+   `TAURI_SIGNING_PRIVATE_KEY` / `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`.
 3. **`poetry.lock`** has been regenerated for the trimmed deps. If you change
    `backend/pyproject.toml` again, re-run `cd backend && poetry lock`.
 
@@ -92,9 +95,9 @@ Code changes already applied:
 `PORT` is injected by Railway. The first WS connect logs the real `Origin` header
 — confirm it matches `ALLOWED_ORIGINS`, then flip `ENFORCE_WS_ORIGIN=true`.
 
-> **Prod prerequisite:** prod Convex (`unique-jaguar-230`) is not yet provisioned.
-> Until it is (DNS, env vars, `users:backfillUserKeys` with `APP_ENV=live`, the
-> `auth.config.ts` issuer fix), point the prod backend at dev Convex or hold prod.
+> **Prod prerequisite — DONE (2026-06-30):** prod Convex (`unique-jaguar-230`) is
+> provisioned and live (env vars, functions, `APP_ENV=live`, issuer fix); the prod
+> backend points at it.
 
 ---
 
@@ -111,11 +114,11 @@ service **`updates`** (`9190f6f0-5665-4456-8738-2529589bfb00`), Volume
 3. Variables set: `UPDATES_PUBLISH_TOKEN` (strong random, **must match** the CI
    secret of the same name), `UPDATES_PUBLIC_BASE_URL=https://updates.wininterview.xyz`,
    `UPDATES_DATA_DIR=/data`.
-4. Custom domain `updates.wininterview.xyz` — **PENDING**: add it in the Railway
-   dashboard (Settings → Networking) for the `updates` service, then create the
-   **CNAME + `_railway-verify.updates` TXT** it shows at Hostinger (same pattern as
-   `api`/`api-dev`). Do NOT use railway-agent for the domain (it omits the TXT).
-   This must match `plugins.updater.endpoints` in `tauri.conf.json`.
+4. Custom domain `updates.wininterview.xyz` — **LIVE (2026-07-01, valid TLS)**:
+   added in the Railway dashboard (Settings → Networking), then CNAME +
+   **`_railway-verify.updates` TXT** created at Hostinger (same pattern as
+   `api`/`api-dev`). Matches `plugins.updater.endpoints` in `tauri.conf.json`.
+   Do NOT use railway-agent for domains (it omits the TXT).
 
 `GET /latest.json` serves the manifest (404 before the first publish = treated as
 "up to date" — expected); `GET /<file>` serves installers; `POST /publish`
@@ -147,7 +150,8 @@ uses the NSIS `*-setup.exe`.
 ## 4. Release flow (CI → updates service + GitHub Release)
 
 1. Set repo **secrets**: `TAURI_SIGNING_PRIVATE_KEY` (content of
-   `~/.tauri/wininterview.key`), `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (empty),
+   `~/.tauri/wininterview.key`), `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (the key's
+   password — must be non-empty, see key custody above),
    `UPDATES_PUBLISH_TOKEN` (**identical** to the Railway `updates` var); and
    **variable** `UPDATES_URL=https://updates.wininterview.xyz`.
 2. **Version invariant (enforced in CI):** the tag (minus `v`) must equal
@@ -181,13 +185,16 @@ volume. Every signed artifact is archived on its GitHub Release for quick rebuil
 
 - **Frontend (done here):** `npm run build` ✅ green, `npm run lint` ✅ clean.
 - **Backend (done here):** Python files compile; `poetry.lock` regenerated.
-- **Rust (pending — needs network):** `cd src-tauri && cargo check`, then
-  `npm run tauri dev` and test mic / system / both audio against
-  `wss://api-dev.wininterview.xyz`; confirm transcription, LLM responses, screen
-  analysis, and quota flush to Convex.
+- **Rust:** `cargo check` green (2026-06-30); real signed installers built since.
 - **Backend deploy:** hit `https://api-dev.wininterview.xyz/health` → `{"status":"ok"}`.
-- **Updater:** install v0.1.x, publish v0.2.0 via CI, relaunch → confirms update.
-  Verify a tampered/incorrect `.sig` is rejected (signature mismatch).
+- **Updater — VERIFIED E2E (2026-07-01, v0.1.0 → v0.1.1):** installed 0.1.0
+  per-user (NSIS lands in `%LOCALAPPDATA%\interview-responder\`, binary is
+  `app.exe`), tagged v0.1.1 → CI published → relaunch: silent download →
+  `UpdateBanner` → "Después" dismisses without restarting → "Reiniciar ahora"
+  runs the passive NSIS install and relaunches as 0.1.1 (binary + uninstall
+  registry confirmed). **Negative test:** published a manifest whose signature
+  didn't match the artifact → app refused to install and kept running 0.1.1
+  (manifest then restored). **Up-to-date launch:** no banner, normal startup.
 
 ---
 
