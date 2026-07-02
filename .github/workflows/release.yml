@@ -22,8 +22,25 @@ on:
 jobs:
   build-and-publish:
     runs-on: windows-latest
+    permissions:
+      contents: write # needed to create the GitHub Release
     steps:
       - uses: actions/checkout@v4
+
+      # Fail fast if the pushed tag doesn't match the version baked into the app.
+      # The updater compares the manifest version (derived from the tag) against
+      # the version compiled from tauri.conf.json, so a mismatch strands clients.
+      - name: Verify tag matches app version
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}".TrimStart("v")
+          $pkg = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $conf = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          Write-Host "tag=$tag  package.json=$pkg  tauri.conf.json=$conf"
+          if ($tag -ne $pkg -or $tag -ne $conf) {
+            throw "Version mismatch: tag=$tag package.json=$pkg tauri.conf.json=$conf (all three must match)"
+          }
 
       - uses: actions/setup-node@v4
         with:
@@ -52,6 +69,7 @@ jobs:
         run: npm run tauri build
 
       - name: Publish to updates service
+        if: startsWith(github.ref, 'refs/tags/')
         shell: pwsh
         env:
           UPDATES_URL: ${{ vars.UPDATES_URL }}
@@ -69,3 +87,17 @@ jobs:
             -F "notes=Release $version" `
             -F "setup=@$($setup.FullName)" `
             -F "signature=@$($sig.FullName)"
+
+      # Canonical, CDN-backed download for NEW users (the updater only reaches
+      # already-installed apps). Also archives every signed artifact for rollback.
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            src-tauri/target/release/bundle/nsis/*-setup.exe
+            src-tauri/target/release/bundle/nsis/*-setup.exe.sig
+            src-tauri/target/release/bundle/msi/*.msi

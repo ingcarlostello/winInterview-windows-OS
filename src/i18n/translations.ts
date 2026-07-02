@@ -128,7 +128,11 @@ export type TranslationKey =
   | "keyLoginSubtitle"
   | "keyLoginVerifying"
   | "keyLoginNotFound"
-  | "keyLoginError";
+  | "keyLoginError"
+  | "updateReady"
+  | "updateDownloading"
+  | "updateRestartNow"
+  | "updateLater";
 
 const translations: Record<Language, Record<TranslationKey, string>> = {
   es: {
@@ -262,6 +266,10 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     keyLoginVerifying: "Verificando...",
     keyLoginNotFound: "Clave no encontrada. Verifica que sea la del entorno correcto (dev/prod).",
     keyLoginError: "No se pudo verificar la clave. Revisa tu conexión.",
+    updateReady: "Actualización {version} lista",
+    updateDownloading: "Descargando actualización {version}…",
+    updateRestartNow: "Reiniciar ahora",
+    updateLater: "Después",
   },
   en: {
     statusDisconnected: "Disconnected",
@@ -394,6 +402,10 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     keyLoginVerifying: "Verifying...",
     keyLoginNotFound: "Key not found. Make sure it matches the current environment (dev/prod).",
     keyLoginError: "Couldn't verify the key. Check your connection.",
+    updateReady: "Update {version} ready",
+    updateDownloading: "Downloading update {version}…",
+    updateRestartNow: "Restart now",
+    updateLater: "Later",
   },
 };
 
