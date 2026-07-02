@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { api } from "../../convex/_generated/api";
 import { useInterviewStore } from "../stores/interview";
 import type { PlanInfo } from "../stores/slices/planSlice";
+import { gateAudioSource } from "../stores/slices/settingsSlice";
 
 export function usePlanSync() {
   const userKey = useInterviewStore((s) => s.userKey);
@@ -34,6 +35,19 @@ export function usePlanSync() {
         invoke("set_content_protected", { enabled: false }).catch(() => {});
         useInterviewStore.getState().setContentProtected(false);
       }
+    }
+
+    // Sanitize a stale persisted audioSource against the authoritative plan seed
+    // (same pattern as invisible_mode above). This runs on app open even if the
+    // user never connects, so localStorage reflects what the plan actually allows.
+    const currentSource = useInterviewStore.getState().audioSource;
+    const gatedSource = gateAudioSource(
+      currentSource,
+      info.features.system_audio_capture,
+      info.features.simultaneous_audio,
+    );
+    if (gatedSource !== currentSource) {
+      useInterviewStore.getState().setAudioSource(gatedSource);
     }
   }, [convexPlanInfo, mergePlanInfo]);
 }

@@ -5,6 +5,29 @@ export type Language = "es" | "en";
 export type Theme = "dark" | "glass";
 export type AudioSource = "mic" | "system" | "both";
 
+/**
+ * Gate a persisted `audioSource` against the current plan's capabilities.
+ *
+ * `audioSource` is persisted in localStorage and is NOT tied to the plan, so a
+ * stale `"system"`/`"both"` value (e.g. left over from an Ultra session on the
+ * same machine, or a downgrade) would otherwise drive the Rust capture and make
+ * the app record system/loopback audio instead of the microphone. Since audio
+ * capture moved to the Rust client (2026-06-30), the backend can no longer
+ * enforce this — the client must. Returns `"mic"` whenever the plan lacks the
+ * feature the source requires; otherwise returns the source unchanged.
+ *
+ * Takes plain booleans (not `FeatureFlags`) to stay decoupled from the plan slice.
+ */
+export function gateAudioSource(
+  source: AudioSource,
+  canSystemAudio: boolean,
+  canSimultaneousAudio: boolean,
+): AudioSource {
+  if (source === "system" && !canSystemAudio) return "mic";
+  if (source === "both" && !canSimultaneousAudio) return "mic";
+  return source;
+}
+
 interface CustomPrompts {
   es: string;
   en: string;
